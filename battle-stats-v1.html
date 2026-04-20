@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>战斗卡播报统计可视化</title>
+  <!-- 本地 Chart.js 副本，与 index.html 同目录，离线可用 -->
+  <script src="./chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+      font-size: 14px;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+      color: #fff;
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+    .header h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.02em; }
+    .header .subtitle { font-size: 12px; color: #94a3b8; margin-left: 8px; }
+
+    /* ── Layout ── */
+    .container { max-width: 1360px; margin: 0 auto; padding: 20px 24px 40px; }
+
+    /* ── Input section ── */
+    .input-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .input-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .input-card-header h2 {
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .input-actions { display: flex; gap: 8px; align-items: center; }
+
+    textarea {
+      width: 100%;
+      height: 150px;
+      border: 1px solid #e2e8f0;
+      border-radius: 7px;
+      padding: 11px 13px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12.5px;
+      color: #334155;
+      resize: vertical;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+      background: #f8fafc;
+    }
+    textarea:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+      background: #fff;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 16px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all .15s;
+    }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-ghost {
+      background: #fff;
+      color: #64748b;
+      border: 1px solid #e2e8f0;
+    }
+    .btn-ghost:hover { background: #f1f5f9; border-color: #94a3b8; }
+
+    .parse-status {
+      margin-top: 8px;
+      font-size: 12.5px;
+      color: #94a3b8;
+      min-height: 18px;
+    }
+    .parse-status.ok { color: #16a34a; }
+    .parse-status.err { color: #dc2626; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: none;
+      gap: 14px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 13px 18px;
+      flex: 1;
+      min-width: 110px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .stat-value { font-size: 26px; font-weight: 700; line-height: 1; }
+    .stat-label { font-size: 11px; color: #64748b; margin-top: 4px; }
+    .stat-red .stat-value { color: #dc2626; }
+    .stat-blue .stat-value { color: #3b82f6; }
+
+    /* ── Tabs ── */
+    .tabs {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+    .tab-nav {
+      display: flex;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    .tab-btn {
+      padding: 13px 22px;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: #64748b;
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2.5px solid transparent;
+      margin-bottom: -1px;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn:hover { color: #3b82f6; }
+    .tab-btn.active { color: #3b82f6; border-bottom-color: #3b82f6; font-weight: 700; background: #fff; }
+
+    .tab-pane { display: none; padding: 22px 24px; }
+    .tab-pane.active { display: block; }
+
+    /* ── Chart controls ── */
+    .chart-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    .ctrl-label { font-size: 12.5px; color: #64748b; }
+
+    select {
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 13px;
+      color: #334155;
+      background: #fff;
+      cursor: pointer;
+      outline: none;
+      transition: border-color .15s;
+    }
+    select:focus { border-color: #3b82f6; }
+
+    .toggle-group { display: flex; gap: 3px; }
+    .toggle-btn {
+      padding: 5px 13px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #64748b;
+      transition: all .12s;
+    }
+    .toggle-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+
+    .chart-wrap { position: relative; height: 400px; }
+
+    /* ── Table ── */
+    .table-filters {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .filter-right { margin-left: auto; font-size: 12px; color: #94a3b8; }
+
+    .table-wrap { overflow-x: auto; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      background: #f8fafc;
+      color: #475569;
+      font-weight: 600;
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid #e2e8f0;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+    }
+    thead th:hover { color: #3b82f6; }
+    thead th.sort-asc::after { content: ' ▲'; font-size: 10px; }
+    thead th.sort-desc::after { content: ' ▼'; font-size: 10px; }
+
+    tbody td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+    tbody tr:hover td { background: #f8fafc; }
+    tbody tr:last-child td { border-bottom: none; }
+
+    tr.row-red td { background: #fff5f5; }
+    tr.row-red:hover td { background: #fee2e2; }
+    tr.row-yellow td { background: #fffbeb; }
+    tr.row-yellow:hover td { background: #fef9c3; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+    .badge-red    { background: #fef2f2; color: #dc2626; }
+    .badge-yellow { background: #fffbeb; color: #b45309; }
+    .badge-green  { background: #f0fdf4; color: #15803d; }
+    .badge-gray   { background: #f1f5f9; color: #64748b; }
+
+    /* ── Export ── */
+    .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 640px) { .export-grid { grid-template-columns: 1fr; } }
+    .export-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 9px;
+      padding: 18px 20px;
+    }
+    .export-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+    .export-card p { font-size: 12.5px; color: #64748b; margin-bottom: 14px; line-height: 1.6; }
+    .export-hint {
+      grid-column: 1 / -1;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 9px;
+      padding: 18px 20px;
+    }
+    .export-hint h3 { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+    .export-hint ol { padding-left: 18px; font-size: 13px; color: #475569; line-height: 2; }
+    .export-hint code {
+      background: #e2e8f0;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+    }
+
+    /* ── Empty state ── */
+    .empty-state { text-align: center; padding: 56px 20px; color: #cbd5e1; }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state p { font-size: 13.5px; }
+  </style>
+</head>
+
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+  </svg>
+  <h1>战斗卡播报统计可视化</h1>
+  <span class="subtitle">粘贴日志 · 自动解析 · 图表 + 导出</span>
+</div>
+
+<div class="container">
+
+  <!-- ── Input ── -->
+  <div class="input-card">
+    <div class="input-card-header">
+      <h2>原始日志</h2>
+      <div class="input-actions">
+        <button class="btn btn-ghost" onclick="loadSample()">载入示例</button>
+        <button class="btn btn-ghost" onclick="clearInput()">清空</button>
+        <button class="btn btn-primary" onclick="parseAndUpdate()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          解析 &amp; 更新
+        </button>
+      </div>
+    </div>
+    <textarea id="rawInput"
+      placeholder="粘贴原始卡播报日志，支持多日期、多区服混合粘贴…&#10;&#10;例：&#10;smzz_smzz19_3:123.60.160.157:cn：【神明-星辉誓印】日期:{{2026,4,13},{0,0,0}} 卡播报统计&#10;信息：&#10;   总统计 异常:71次 总次数:44886次 异常率:0.16%&#10;   类型:37(组队BOSS) 异常:38次 总次数:1159次 异常率:3.28%"></textarea>
+    <div id="parseStatus" class="parse-status"></div>
+  </div>
+
+  <!-- ── Stats bar ── -->
+  <div id="statsBar" class="stats-bar">
+    <div class="stat-card stat-blue">
+      <div class="stat-value" id="statDays">—</div>
+      <div class="stat-label">日期数</div>
+    </div>
+    <div class="stat-card stat-blue">
+      <div class="stat-value" id="statServers">—</div>
+      <div class="stat-label">区服数</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statRecords">—</div>
+      <div class="stat-label">数据条目</div>
+    </div>
+    <div class="stat-card stat-red">
+      <div class="stat-value" id="statMaxRate">—</div>
+      <div class="stat-label">最高异常率</div>
+    </div>
+    <div class="stat-card stat-red">
+      <div class="stat-value" id="statMaxWho">—</div>
+      <div class="stat-label">最高异常来源</div>
+    </div>
+  </div>
+
+  <!-- ── Tabs ── -->
+  <div class="tabs">
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="overview">总览折线图</button>
+      <button class="tab-btn" data-tab="type">类型对比</button>
+      <button class="tab-btn" data-tab="table">明细表格</button>
+      <button class="tab-btn" data-tab="export">导出</button>
+    </div>
+
+    <!-- Tab1: Overview -->
+    <div id="pane-overview" class="tab-pane active">
+      <div id="overviewEmpty" class="empty-state">
+        <div class="icon">📊</div>
+        <p>请先粘贴日志并点击「解析 &amp; 更新」</p>
+      </div>
+      <div id="overviewContent" style="display:none">
+        <div class="chart-controls">
+          <span class="ctrl-label">纵轴指标：</span>
+          <div class="toggle-group">
+            <button class="toggle-btn active" id="ovRate" onclick="setMetric('overview','rate')">异常率 (%)</button>
+            <button class="toggle-btn" id="ovCount" onclick="setMetric('overview','count')">异常次数</button>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="overviewChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Tab2: Type comparison -->
+    <div id="pane-type" class="tab-pane">
+      <div id="typeEmpty" class="empty-state">
+        <div class="icon">📈</div>
+        <p>请先粘贴日志并点击「解析 &amp; 更新」</p>
+      </div>
+      <div id="typeContent" style="display:none">
+        <div class="chart-controls">
+          <span class="ctrl-label">战斗类型：</span>
+          <select id="typeSelect" onchange="renderTypeChart()"></select>
+          <span class="ctrl-label" style="margin-left:12px">纵轴指标：</span>
+          <div class="toggle-group">
+            <button class="toggle-btn active" id="tyRate" onclick="setMetric('type','rate')">异常率 (%)</button>
+            <button class="toggle-btn" id="tyCount" onclick="setMetric('type','count')">异常次数</button>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="typeChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Tab3: Detail table -->
+    <div id="pane-table" class="tab-pane">
+      <div id="tableEmpty" class="empty-state">
+        <div class="icon">📋</div>
+        <p>请先粘贴日志并点击「解析 &amp; 更新」</p>
+      </div>
+      <div id="tableContent" style="display:none">
+        <div class="table-filters">
+          <span class="ctrl-label">日期：</span>
+          <select id="fDate" onchange="renderTable()"><option value="">全部</option></select>
+          <span class="ctrl-label">区服：</span>
+          <select id="fServer" onchange="renderTable()"><option value="">全部</option></select>
+          <span class="ctrl-label">类型：</span>
+          <select id="fType" onchange="renderTable()"><option value="">全部</option></select>
+          <span class="ctrl-label">异常率：</span>
+          <select id="fRate" onchange="renderTable()">
+            <option value="">全部</option>
+            <option value="5">≥ 5%（高危）</option>
+            <option value="1">≥ 1%（警告）</option>
+            <option value="nonzero">大于 0%</option>
+          </select>
+          <span class="filter-right" id="tableCount">— 条记录</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="tableHead">
+              <tr>
+                <th data-key="date">日期</th>
+                <th data-key="serverName">区服</th>
+                <th data-key="typeName">战斗类型</th>
+                <th data-key="abnormal">异常次数</th>
+                <th data-key="total">总次数</th>
+                <th data-key="rate">异常率</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab4: Export -->
+    <div id="pane-export" class="tab-pane">
+      <div class="export-grid">
+        <div class="export-card">
+          <h3>下载 TSV（制表符分隔）</h3>
+          <p>直接复制粘贴或拖入 Excel，Excel 会自动识别并分列。若未自动分列，选「数据 → 分列 → 分隔符号 → 制表符」。</p>
+          <button class="btn btn-primary" onclick="downloadFile('tsv')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载 TSV 文件
+          </button>
+        </div>
+        <div class="export-card">
+          <h3>下载 CSV（逗号分隔）</h3>
+          <p>通用格式，双击可直接用 Excel 打开。文件含 UTF-8 BOM 头，确保中文正常显示，不出现乱码。</p>
+          <button class="btn btn-ghost" onclick="downloadFile('csv')" style="border-color:#3b82f6;color:#3b82f6">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载 CSV 文件
+          </button>
+        </div>
+        <div class="export-hint">
+          <h3>Excel 折线图绘制步骤</h3>
+          <ol>
+            <li>将 <code>日期</code> 列设为「日期」格式（选中列 → 右键 → 设置单元格格式）</li>
+            <li>筛选 <code>统计粒度</code> = <code>总统计</code>，可查看各服总异常率趋势</li>
+            <li>或筛选 <code>战斗类型</code> = <code>世界组队boss</code> 等，查看单一类型跨服对比</li>
+            <li>选中「日期」「区服名称」「异常率数值」三列 → 插入 → 折线图</li>
+            <li>图表系列建议选 <code>区服名称</code> 作为图例，横轴为 <code>日期</code></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tabs -->
+</div><!-- /container -->
+
+<script>
+// =============================================================
+//  Constants & State
+// =============================================================
+const PALETTE = [
+  '#3b82f6','#ef4444','#10b981','#f59e0b',
+  '#8b5cf6','#ec4899','#06b6d4','#f97316',
+  '#84cc16','#6366f1','#14b8a6','#a855f7'
+];
+
+const EXPORT_HEADERS = [
+  '日期','区服代码','区服名称','统计粒度','类型ID',
+  '战斗类型','异常次数','总次数','异常率','异常率数值'
+];
+
+let allRecords  = [];
+let ovMetric    = 'rate';  // 'rate' | 'count'
+let tyMetric    = 'rate';
+let sortKey     = 'date';
+let sortAsc     = true;
+let ovChart     = null;
+let tyChart     = null;
+
+// =============================================================
+//  Parser
+// =============================================================
+function parseLog(text) {
+  const records = [];
+  const lines   = text.split('\n');
+  let server = null, serverName = null, date = null;
+
+  for (const raw of lines) {
+    const line = raw.replace(/^\s*\d+\|\s*/, '').trim(); // strip MD line-number artifacts
+    if (!line || line.startsWith('#')) continue;
+
+    // ── Server header ──
+    // e.g. smzz_smzz19_3:123.60.160.157:cn：【神明-星辉誓印】日期:{{2026,4,13},{0,0,0}}
+    const hm = line.match(/^(\w+):[^：\n]+：【([^】]+)】.*?\{\{(\d+),(\d+),(\d+)\}/);
+    if (hm) {
+      server     = hm[1];
+      serverName = hm[2];
+      date       = `${hm[3]}-${hm[4].padStart(2,'0')}-${hm[5].padStart(2,'0')}`;
+      continue;
+    }
+
+    if (!server || !date) continue;
+
+    // ── Total stats ──
+    const tm = line.match(/总统计\s+异常:(\d+)次\s+总次数:(\d+)次\s+异常率:([\d.]+)%/);
+    if (tm) {
+      records.push({ date, serverCode:server, serverName,
+        typeId:'', typeName:'总统计', isTotal:true,
+        abnormal:+tm[1], total:+tm[2], rate:+tm[3] });
+      continue;
+    }
+
+    // ── Type stats ──
+    const pm = line.match(/类型:(\d+)\(([^)]+)\)\s+异常:(\d+)次\s+总次数:(\d+)次\s+异常率:([\d.]+)%/);
+    if (pm) {
+      records.push({ date, serverCode:server, serverName,
+        typeId:pm[1], typeName:pm[2], isTotal:false,
+        abnormal:+pm[3], total:+pm[4], rate:+pm[5] });
+    }
+  }
+  return records;
+}
+
+// =============================================================
+//  Main trigger
+// =============================================================
+function parseAndUpdate() {
+  const text = document.getElementById('rawInput').value;
+  if (!text.trim()) { setStatus('请先粘贴原始日志','err'); return; }
+
+  try {
+    allRecords = parseLog(text);
+    if (!allRecords.length) { setStatus('未解析到任何数据，请检查格式','err'); return; }
+
+    updateStats();
+    renderOverviewChart();
+    initTypeSelect(); renderTypeChart();
+    initTableFilters(); renderTable();
+
+    document.getElementById('statsBar').style.display = 'flex';
+    setStatus(`解析成功：共 ${allRecords.length} 条记录，涉及 ${uniq(allRecords,'date').length} 天 / ${uniq(allRecords,'serverCode').length} 区服`, 'ok');
+  } catch(e) {
+    setStatus('解析出错：' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('parseStatus');
+  el.textContent = msg;
+  el.className   = 'parse-status ' + (cls || '');
+}
+
+// =============================================================
+//  Stats bar
+// =============================================================
+function updateStats() {
+  const maxR = allRecords.reduce((a,b) => b.rate > a.rate ? b : a, allRecords[0]);
+  document.getElementById('statDays').textContent    = uniq(allRecords,'date').length;
+  document.getElementById('statServers').textContent = uniq(allRecords,'serverCode').length;
+  document.getElementById('statRecords').textContent = allRecords.length;
+  document.getElementById('statMaxRate').textContent = maxR.rate.toFixed(2) + '%';
+  document.getElementById('statMaxWho').textContent  =
+    maxR.serverName.replace(/神明-/,'') + ' · ' + maxR.typeName;
+}
+
+// =============================================================
+//  Tab switching
+// =============================================================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('pane-' + tab).classList.add('active');
+  });
+});
+
+// =============================================================
+//  Tab1 – Overview line chart
+// =============================================================
+function setMetric(which, val) {
+  if (which === 'overview') {
+    ovMetric = val;
+    document.getElementById('ovRate').classList.toggle('active', val==='rate');
+    document.getElementById('ovCount').classList.toggle('active', val==='count');
+    renderOverviewChart();
+  } else {
+    tyMetric = val;
+    document.getElementById('tyRate').classList.toggle('active', val==='rate');
+    document.getElementById('tyCount').classList.toggle('active', val==='count');
+    renderTypeChart();
+  }
+}
+
+function renderOverviewChart() {
+  if (!allRecords.length) return;
+  document.getElementById('overviewEmpty').style.display   = 'none';
+  document.getElementById('overviewContent').style.display = 'block';
+
+  const totals  = allRecords.filter(r => r.isTotal);
+  const dates   = uniq(totals,'date').sort();
+  const servers = uniq(totals,'serverCode');
+
+  const datasets = servers.map((code, i) => {
+    const name = totals.find(r => r.serverCode===code)?.serverName || code;
+    return {
+      label: name,
+      data: dates.map(d => {
+        const r = totals.find(x => x.serverCode===code && x.date===d);
+        return r ? (ovMetric==='rate' ? r.rate : r.abnormal) : null;
+      }),
+      borderColor: PALETTE[i % PALETTE.length],
+      backgroundColor: PALETTE[i % PALETTE.length] + '20',
+      fill: false, tension: 0.35, pointRadius: 5, pointHoverRadius: 8,
+      spanGaps: false
+    };
+  });
+
+  if (ovChart) ovChart.destroy();
+  ovChart = makeLineChart('overviewChart', dates, datasets,
+    ovMetric==='rate' ? '异常率 (%)' : '异常次数',
+    v => ovMetric==='rate' ? v.toFixed(2)+'%' : v+' 次'
+  );
+}
+
+// =============================================================
+//  Tab2 – Type comparison chart
+// =============================================================
+function initTypeSelect() {
+  const types = uniq(allRecords.filter(r=>!r.isTotal),'typeName').sort();
+  const sel   = document.getElementById('typeSelect');
+  const prev  = sel.value;
+  sel.innerHTML = types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  if (types.includes(prev)) sel.value = prev;
+}
+
+function renderTypeChart() {
+  if (!allRecords.length) return;
+  document.getElementById('typeEmpty').style.display   = 'none';
+  document.getElementById('typeContent').style.display = 'block';
+
+  const selType = document.getElementById('typeSelect').value;
+  const rows    = allRecords.filter(r => r.typeName === selType);
+  const dates   = uniq(allRecords,'date').sort();
+  const servers = uniq(rows,'serverCode');
+
+  const datasets = servers.map((code, i) => {
+    const name = rows.find(r=>r.serverCode===code)?.serverName || code;
+    return {
+      label: name,
+      data: dates.map(d => {
+        const r = rows.find(x => x.serverCode===code && x.date===d);
+        return r ? (tyMetric==='rate' ? r.rate : r.abnormal) : null;
+      }),
+      borderColor: PALETTE[i % PALETTE.length],
+      backgroundColor: PALETTE[i % PALETTE.length] + '20',
+      fill: false, tension: 0.35, pointRadius: 5, pointHoverRadius: 8,
+      spanGaps: false
+    };
+  });
+
+  if (tyChart) tyChart.destroy();
+  tyChart = makeLineChart('typeChart', dates, datasets,
+    tyMetric==='rate' ? '异常率 (%)' : '异常次数',
+    v => tyMetric==='rate' ? v.toFixed(2)+'%' : v+' 次'
+  );
+}
+
+function makeLineChart(canvasId, labels, datasets, yLabel, fmtFn) {
+  return new Chart(document.getElementById(canvasId), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { position:'top', labels:{ boxWidth:12, padding:16 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              return ` ${ctx.dataset.label}: ${v!=null ? fmtFn(v) : 'N/A'}`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          title:{ display:true, text:yLabel },
+          beginAtZero: true,
+          ticks: { callback: v => fmtFn(v) }
+        },
+        x: { title:{ display:true, text:'日期' } }
+      }
+    }
+  });
+}
+
+// =============================================================
+//  Tab3 – Detail table
+// =============================================================
+function initTableFilters() {
+  fillSelect('fDate',   uniq(allRecords,'date').sort());
+  fillSelect('fServer', uniq(allRecords,'serverName').sort());
+  fillSelect('fType',   uniq(allRecords,'typeName').sort());
+}
+
+function renderTable() {
+  if (!allRecords.length) return;
+  document.getElementById('tableEmpty').style.display   = 'none';
+  document.getElementById('tableContent').style.display = 'block';
+
+  const fDate   = document.getElementById('fDate').value;
+  const fServer = document.getElementById('fServer').value;
+  const fType   = document.getElementById('fType').value;
+  const fRate   = document.getElementById('fRate').value;
+
+  let rows = allRecords.filter(r =>
+    (!fDate   || r.date       === fDate)   &&
+    (!fServer || r.serverName === fServer) &&
+    (!fType   || r.typeName   === fType)   &&
+    (!fRate   || rateFilter(r.rate, fRate))
+  );
+
+  rows.sort((a,b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (typeof av==='string') av=av.toLowerCase(), bv=bv.toLowerCase();
+    return sortAsc ? (av>bv?1:-1) : (av<bv?1:-1);
+  });
+
+  // Update header sort indicators
+  document.querySelectorAll('#tableHead th').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (th.dataset.key === sortKey)
+      th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+  });
+
+  document.getElementById('tableCount').textContent = `${rows.length} 条记录`;
+
+  document.getElementById('tableBody').innerHTML = rows.map(r => {
+    const isRed    = r.rate >= 5;
+    const isYellow = r.rate >= 1 && r.rate < 5;
+    const rowCls   = isRed ? 'row-red' : isYellow ? 'row-yellow' : '';
+    const badgeCls = isRed ? 'badge-red' : isYellow ? 'badge-yellow' : r.rate > 0 ? 'badge-green' : 'badge-gray';
+    return `<tr class="${rowCls}">
+      <td>${r.date}</td>
+      <td>${esc(r.serverName)}</td>
+      <td>${esc(r.typeName)}</td>
+      <td>${r.abnormal.toLocaleString()}</td>
+      <td>${r.total.toLocaleString()}</td>
+      <td><span class="badge ${badgeCls}">${r.rate.toFixed(2)}%</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function rateFilter(rate, fRate) {
+  if (fRate === '5')       return rate >= 5;
+  if (fRate === '1')       return rate >= 1;
+  if (fRate === 'nonzero') return rate > 0;
+  return true;
+}
+
+// Table sort on header click
+document.getElementById('tableHead').addEventListener('click', e => {
+  const th = e.target.closest('th[data-key]');
+  if (!th) return;
+  const key = th.dataset.key;
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = true; }
+  renderTable();
+});
+
+// =============================================================
+//  Tab4 – Export
+// =============================================================
+function buildExportRows() {
+  return allRecords.map(r => [
+    r.date, r.serverCode, r.serverName,
+    r.isTotal ? '总统计' : '分类型',
+    r.typeId, r.typeName,
+    r.abnormal, r.total,
+    r.rate.toFixed(2) + '%',
+    r.rate
+  ]);
+}
+
+function downloadFile(fmt) {
+  if (!allRecords.length) { alert('请先解析日志'); return; }
+  const rows = [EXPORT_HEADERS, ...buildExportRows()];
+
+  let content, mime, ext;
+  if (fmt === 'tsv') {
+    content = rows.map(r => r.join('\t')).join('\r\n');
+    mime    = 'text/tab-separated-values;charset=utf-8';
+    ext     = 'tsv';
+  } else {
+    content = '\ufeff' + rows.map(r =>
+      r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')
+    ).join('\r\n');
+    mime    = 'text/csv;charset=utf-8';
+    ext     = 'csv';
+  }
+
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const date = new Date().toISOString().slice(0,10);
+  a.href     = url;
+  a.download = `battle-stats-${date}.${ext}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// =============================================================
+//  Helpers
+// =============================================================
+function uniq(arr, key) {
+  return [...new Set(arr.map(r => r[key]))];
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fillSelect(id, items) {
+  const sel  = document.getElementById(id);
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">全部</option>' +
+    items.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  if (items.includes(prev)) sel.value = prev;
+}
+
+function clearInput() {
+  document.getElementById('rawInput').value = '';
+  setStatus('', '');
+}
+
+// =============================================================
+//  Sample data
+// =============================================================
+const SAMPLE = `# 2026-04-13
+smzz_smzz19_3:123.60.160.157:cn：【神明-星辉誓印】日期:{{2026,4,13},{0,0,0}} 卡播报统计
+信息：
+   总统计 异常:71次 总次数:44886次 异常率:0.16%
+   类型:37(组队BOSS) 异常:38次 总次数:1159次 异常率:3.28%
+   类型:43(世界组队boss) 异常:21次 总次数:292次 异常率:7.19%
+   类型:38(多波爬塔) 异常:9次 总次数:1530次 异常率:0.59%
+   类型:45(主线闯关) 异常:1次 总次数:18139次 异常率:0.01%
+   类型:30(段位赛) 异常:1次 总次数:1640次 异常率:0.06%
+   类型:1(PK) 异常:1次 总次数:29次 异常率:3.45%
+   类型:23(主线爬塔) 异常:0次 总次数:21152次 异常率:0.00%
+   类型:44(公会悬赏) 异常:0次 总次数:811次 异常率:0.00%
+   类型:15(战斗预览) 异常:0次 总次数:126次 异常率:0.00%
+   类型:4(地图战斗) 异常:0次 总次数:8次 异常率:0.00%
+
+smzz_smzz19_2:123.60.160.157:cn：【神明-启明回廊（返利服）】日期:{{2026,4,13},{0,0,0}} 卡播报统计
+信息：
+   总统计 异常:9次 总次数:4833次 异常率:0.19%
+   类型:43(世界组队boss) 异常:5次 总次数:28次 异常率:17.86%
+   类型:37(组队BOSS) 异常:4次 总次数:137次 异常率:2.92%
+   类型:23(主线爬塔) 异常:0次 总次数:2523次 异常率:0.00%
+   类型:45(主线闯关) 异常:0次 总次数:1745次 异常率:0.00%
+   类型:30(段位赛) 异常:0次 总次数:165次 异常率:0.00%
+   类型:38(多波爬塔) 异常:0次 总次数:160次 异常率:0.00%
+   类型:44(公会悬赏) 异常:0次 总次数:65次 异常率:0.00%
+   类型:1(PK) 异常:0次 总次数:8次 异常率:0.00%
+   类型:15(战斗预览) 异常:0次 总次数:1次 异常率:0.00%
+   类型:4(地图战斗) 异常:0次 总次数:1次 异常率:0.00%
+
+smzz_smzz19_4:123.60.160.157:cn：【神明-渊海机枢】日期:{{2026,4,13},{0,0,0}} 卡播报统计
+信息：
+   总统计 异常:97次 总次数:62637次 异常率:0.15%
+   类型:37(组队BOSS) 异常:72次 总次数:1595次 异常率:4.51%
+   类型:43(世界组队boss) 异常:10次 总次数:332次 异常率:3.01%
+   类型:38(多波爬塔) 异常:9次 总次数:2048次 异常率:0.44%
+   类型:45(主线闯关) 异常:3次 总次数:25120次 异常率:0.01%
+   类型:23(主线爬塔) 异常:1次 总次数:29836次 异常率:0.00%
+   类型:30(段位赛) 异常:1次 总次数:2192次 异常率:0.05%
+   类型:4(地图战斗) 异常:1次 总次数:20次 异常率:5.00%
+   类型:44(公会悬赏) 异常:0次 总次数:1168次 异常率:0.00%
+   类型:15(战斗预览) 异常:0次 总次数:247次 异常率:0.00%
+   类型:1(PK) 异常:0次 总次数:78次 异常率:0.00%
+   类型:19(新手BOSS) 异常:0次 总次数:1次 异常率:0.00%
+
+# 2026-04-14
+smzz_smzz19_4:123.60.160.157:cn：【神明-渊海机枢】日期:{{2026,4,14},{0,0,0}} 卡播报统计
+信息：
+   总统计 异常:187次 总次数:50002次 异常率:0.37%
+   类型:37(组队BOSS) 异常:96次 总次数:1269次 异常率:7.57%
+   类型:43(世界组队boss) 异常:77次 总次数:294次 异常率:26.19%
+   类型:38(多波爬塔) 异常:10次 总次数:1659次 异常率:0.60%
+   类型:45(主线闯关) 异常:2次 总次数:20309次 异常率:0.01%
+   类型:30(段位赛) 异常:2次 总次数:1767次 异常率:0.11%
+   类型:23(主线爬塔) 异常:0次 总次数:23526次 异常率:0.00%
+   类型:44(公会悬赏) 异常:0次 总次数:948次 异常率:0.00%
+   类型:15(战斗预览) 异常:0次 总次数:141次 异常率:0.00%
+   类型:1(PK) 异常:0次 总次数:79次 异常率:0.00%
+   类型:4(地图战斗) 异常:0次 总次数:7次 异常率:0.00%
+   类型:19(新手BOSS) 异常:0次 总次数:3次 异常率:0.00%
+
+smzz_smzz19_2:123.60.160.157:cn：【神明-启明回廊（返利服）】日期:{{2026,4,14},{0,0,0}} 卡播报统计
+信息：
+   总统计 异常:13次 总次数:4439次 异常率:0.29%
+   类型:37(组队BOSS) 异常:9次 总次数:153次 异常率:5.88%
+   类型:43(世界组队boss) 异常:2次 总次数:16次 异常率:12.50%
+   类型:45(主线闯关) 异常:1次 总次数:1212次 异常率:0.08%
+   类型:1(PK) 异常:1次 总次数:41次 异常率:2.44%
+   类型:23(主线爬塔) 异常:0次 总次数:2704次 异常率:0.00%
+   类型:30(段位赛) 异常:0次 总次数:123次 异常率:0.00%
+   类型:38(多波爬塔) 异常:0次 总次数:121次 异常率:0.00%
+   类型:44(公会悬赏) 异常:0次 总次数:64次 异常率:0.00%
+   类型:15(战斗预览) 异常:0次 总次数:4次 异常率:0.00%
+   类型:4(地图战斗) 异常:0次 总次数:1次 异常率:0.00%
+
+smzz_smzz19_3:123.60.160.157:cn：【神明-星辉誓印】日期:{{2026,4,14},{0,0,0}} 卡播报统计
+信息：
+   总统计 异常:114次 总次数:39263次 异常率:0.29%
+   类型:37(组队BOSS) 异常:63次 总次数:1037次 异常率:6.08%
+   类型:43(世界组队boss) 异常:37次 总次数:205次 异常率:18.05%
+   类型:38(多波爬塔) 异常:6次 总次数:1533次 异常率:0.39%
+   类型:30(段位赛) 异常:3次 总次数:1335次 异常率:0.22%
+   类型:23(主线爬塔) 异常:2次 总次数:19351次 异常率:0.01%
+   类型:45(主线闯关) 异常:2次 总次数:14927次 异常率:0.01%
+   类型:44(公会悬赏) 异常:1次 总次数:746次 异常率:0.13%
+   类型:15(战斗预览) 异常:0次 总次数:84次 异常率:0.00%
+   类型:1(PK) 异常:0次 总次数:39次 异常率:0.00%
+   类型:4(地图战斗) 异常:0次 总次数:6次 异常率:0.00%`;
+
+function loadSample() {
+  document.getElementById('rawInput').value = SAMPLE;
+  parseAndUpdate();
+}
+</script>
+</body>
+</html>
