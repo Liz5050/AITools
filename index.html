@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AITools - Web Tools</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    .container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+    header { text-align: center; margin-bottom: 50px; }
+    header h1 { font-size: 2.5rem; font-weight: 700; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+    header p { color: #94a3b8; font-size: 1rem; }
+    .tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+    .tool-card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; transition: all 0.2s; text-decoration: none; color: inherit; display: block; }
+    .tool-card:hover { border-color: #38bdf8; transform: translateY(-4px); box-shadow: 0 8px 25px rgba(56, 189, 248, 0.15); }
+    .tool-card .icon { font-size: 2rem; margin-bottom: 12px; }
+    .tool-card h3 { font-size: 1.2rem; font-weight: 600; margin-bottom: 8px; color: #f1f5f9; }
+    .tool-card p { color: #94a3b8; font-size: 0.9rem; line-height: 1.5; }
+    .tool-card .tag { display: inline-block; background: #334155; color: #94a3b8; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; margin-top: 12px; }
+    footer { text-align: center; margin-top: 60px; color: #475569; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🛠️ AITools</h1>
+      <p>Web 工具集合</p>
+    </header>
+
+    <div class="tools" id="tools"></div>
+
+    <footer>
+      <p>持续更新中…</p>
+    </footer>
+  </div>
+
+  <script>
+    const tools = [
+      {
+        icon: '📊',
+        name: '数据查看器',
+        desc: '战斗数据可视化，图表展示各项战斗指标',
+        path: '/data-viewer/',
+        tag: 'Data'
+      },
+      {
+        icon: '🦴',
+        name: 'Spine 骨骼检查',
+        desc: '预览和检查 Spine 骨骼动画资源',
+        path: '/battle-spine-check/',
+        tag: 'Spine'
+      }
+    ];
+
+    const container = document.getElementById('tools');
+    tools.forEach(tool => {
+      const card = document.createElement('a');
+      card.className = 'tool-card';
+      card.href = tool.path;
+      card.innerHTML = `
+        <div class="icon">${tool.icon}</div>
+        <h3>${tool.name}</h3>
+        <p>${tool.desc}</p>
+        <span class="tag">${tool.tag}</span>
+      `;
+      container.appendChild(card);
+    });
+  </script>
+</body>
+</html>
