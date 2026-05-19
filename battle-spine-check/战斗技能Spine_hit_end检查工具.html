@@ -1,0 +1,1598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>战斗技能 Spine hit_end 配置检查工具</title>
+    <script src="./Spine 动画预览_files/vue.global.js.下载"></script>
+    <script src="./Spine 动画预览_files/spine-webgl.js.下载"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-card: #252540;
+            --accent-cyan: #00d4ff;
+            --accent-purple: #7c3aed;
+            --text-primary: #ffffff;
+            --text-secondary: #b8b8c8;
+            --text-muted: #7a7a90;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #60a5fa;
+        }
+        body {
+            font-family: 'Microsoft YaHei', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 20% 20%, rgba(124, 58, 237, 0.18) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, rgba(0, 212, 255, 0.12) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        #app { position: relative; z-index: 1; padding: 24px; min-height: 100vh; }
+        .app-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding: 20px 28px;
+            background: linear-gradient(135deg, var(--bg-card) 0%, rgba(124, 58, 237, 0.22) 100%);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+        }
+        .app-logo {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: #fff;
+        }
+        .app-title {
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--text-primary), var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .app-subtitle { margin-top: 4px; color: var(--text-muted); font-size: 13px; }
+        .grid { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
+        @media (max-width: 1200px) { .grid { grid-template-columns: 1fr; } }
+        .panel {
+            background: rgba(37, 37, 64, 0.96);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 16px 50px rgba(0, 0, 0, 0.2);
+        }
+        .panel-header {
+            padding: 15px 18px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .panel-title { font-size: 15px; font-weight: 700; }
+        .panel-body { padding: 18px; }
+        .section { display: flex; flex-direction: column; gap: 14px; }
+        .form-group { display: flex; flex-direction: column; gap: 8px; }
+        .form-label { font-size: 12px; color: var(--text-secondary); font-weight: 600; letter-spacing: .3px; }
+        .input, .textarea, .select {
+            width: 100%;
+            padding: 11px 13px;
+            background: rgba(0, 0, 0, 0.28);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 10px;
+            outline: none;
+            font-size: 13px;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .textarea { min-height: 88px; resize: vertical; font-family: Consolas, 'Courier New', monospace; }
+        .input:focus, .textarea:focus, .select:focus { border-color: var(--accent-cyan); box-shadow: 0 0 0 3px rgba(0, 212, 255, .12); }
+        .file-drop {
+            padding: 18px;
+            border: 1px dashed rgba(0, 212, 255, .45);
+            border-radius: 14px;
+            background: rgba(0, 212, 255, .05);
+            color: var(--text-secondary);
+            text-align: center;
+            cursor: pointer;
+        }
+        .file-drop.dragging { border-color: var(--success); background: rgba(16, 185, 129, .08); }
+        .file-input { display: none; }
+        .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn {
+            border: none;
+            border-radius: 10px;
+            padding: 11px 16px;
+            color: #fff;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform .2s, opacity .2s, box-shadow .2s;
+            background: rgba(255, 255, 255, .09);
+            border: 1px solid var(--border-color);
+        }
+        .btn:hover:not(:disabled) { transform: translateY(-1px); }
+        .btn:disabled { opacity: .45; cursor: not-allowed; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-cyan), #0284c7); color: #001018; border: none; }
+        .btn-danger { background: rgba(239, 68, 68, .16); color: #fecaca; border-color: rgba(239, 68, 68, .35); }
+        .btn-success { background: rgba(16, 185, 129, .16); color: #a7f3d0; border-color: rgba(16, 185, 129, .35); }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 12px;
+            font-weight: 700;
+            background: rgba(255, 255, 255, .08);
+            color: var(--text-secondary);
+        }
+        .badge.pass { background: rgba(16, 185, 129, .15); color: #86efac; }
+        .badge.fail { background: rgba(239, 68, 68, .15); color: #fca5a5; }
+        .badge.skip { background: rgba(245, 158, 11, .15); color: #fcd34d; }
+        .badge.info { background: rgba(96, 165, 250, .15); color: #93c5fd; }
+        .config-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+        .config-item {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            background: rgba(0, 0, 0, .18);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+        .config-item.disabled { opacity: .55; border-style: dashed; }
+        .btn-mini { padding: 5px 9px; border-radius: 7px; font-size: 12px; font-weight: 700; }
+        .progress-wrap { display: flex; flex-direction: column; gap: 8px; }
+        .progress-bar { height: 10px; background: rgba(0,0,0,.32); border-radius: 999px; overflow: hidden; }
+        .progress-value { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple)); transition: width .25s; }
+        .summary { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .summary-card { padding: 14px; background: rgba(0,0,0,.18); border: 1px solid var(--border-color); border-radius: 14px; }
+        .summary-num { font-size: 24px; font-weight: 800; margin-top: 5px; }
+        .summary-label { color: var(--text-muted); font-size: 12px; }
+        .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+        .pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 12px; background: rgba(0,0,0,.16); border: 1px solid var(--border-color); border-radius: 12px; }
+        .pager-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .pager-select { width: auto; min-width: 92px; padding: 7px 10px; }
+        .pager-btn { padding: 7px 11px; }
+        .tab { padding: 8px 12px; border-radius: 999px; border: 1px solid var(--border-color); background: rgba(255,255,255,.06); color: var(--text-secondary); cursor: pointer; }
+        .tab.active { color: #001018; background: var(--accent-cyan); border-color: var(--accent-cyan); font-weight: 800; }
+        .table-wrap { overflow: auto; max-height: calc(100vh - 340px); border: 1px solid var(--border-color); border-radius: 14px; }
+        table { width: 100%; border-collapse: collapse; min-width: 1180px; font-size: 12px; }
+        .result-table { table-layout: fixed; width: max-content; min-width: 1180px; }
+        th, td { padding: 0; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
+        th { position: sticky; top: 0; z-index: 2; background: #1f1f36; color: var(--accent-cyan); font-weight: 800; }
+        .th-inner { position: relative; display: flex; align-items: center; min-height: 39px; padding: 10px 18px 10px 12px; user-select: none; }
+        .col-resizer { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 3; }
+        .col-resizer::after { content: ''; position: absolute; top: 8px; bottom: 8px; left: 3px; width: 1px; background: rgba(0,212,255,.25); }
+        .col-resizer:hover::after { background: var(--accent-cyan); box-shadow: 0 0 8px rgba(0,212,255,.45); }
+        .cell-scroll { max-height: 7.75em; overflow: auto; padding: 10px 12px; line-height: 1.55; white-space: normal; word-break: break-all; }
+        .cell-nowrap { white-space: nowrap; }
+        tr:hover td { background: rgba(255,255,255,.03); }
+        .mono { font-family: Consolas, 'Courier New', monospace; }
+        .muted { color: var(--text-muted); }
+        .danger { color: #fca5a5; }
+        .success { color: #86efac; }
+        .warning { color: #fcd34d; }
+        .info { color: #93c5fd; }
+        .small { font-size: 12px; line-height: 1.55; }
+        .log-box { max-height: 180px; overflow: auto; background: rgba(0,0,0,.28); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; font-size: 12px; color: var(--text-secondary); }
+        .preview-mask { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.72); display: flex; align-items: center; justify-content: center; padding: 24px; }
+        .preview-dialog { width: min(1280px, 96vw); max-height: 94vh; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 24px 80px rgba(0,0,0,.45); }
+        .preview-header { padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); gap: 12px; flex-shrink: 0; }
+        .preview-body { display: grid; grid-template-columns: 1fr 300px 260px; gap: 0; flex: 1; min-height: 0; overflow: hidden; }
+        .preview-canvas-col { position: relative; background: rgba(0,0,0,.34); border-right: 1px solid var(--border-color); overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 560px; }
+        #previewCanvas { display: block; background: transparent; }
+        .preview-ctrl-col { padding: 14px; border-right: 1px solid var(--border-color); overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+        .preview-event-col { overflow: hidden; display: flex; flex-direction: column; }
+        .preview-event-col .col-title { padding: 10px 14px; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+        .event-list { flex: 1; overflow-y: auto; }
+        .event-item { display: flex; justify-content: space-between; gap: 10px; padding: 9px 11px; border-bottom: 1px solid var(--border-color); font-size: 12px; }
+        .event-item.hit { color: #fca5a5; background: rgba(239,68,68,.08); }
+        /* 控制面板样式 */
+        .ctrl-group { display: flex; flex-direction: column; gap: 6px; }
+        .ctrl-label { font-size: 11px; color: var(--text-secondary); font-weight: 600; letter-spacing: .3px; }
+        .ctrl-slider-row { display: flex; align-items: center; gap: 8px; }
+        .ctrl-slider { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,.1); appearance: none; cursor: pointer; }
+        .ctrl-slider::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border-radius: 50%; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple)); cursor: pointer; box-shadow: 0 2px 8px rgba(0,212,255,.4); }
+        .ctrl-val { min-width: 44px; padding: 4px 8px; background: rgba(0,212,255,.1); border-radius: 6px; text-align: center; font-size: 12px; font-weight: 600; color: var(--accent-cyan); }
+        .ctrl-check-row { display: flex; align-items: center; gap: 8px; }
+        .ctrl-check-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent-cyan); cursor: pointer; }
+        .ctrl-check-row label { font-size: 13px; cursor: pointer; }
+        .ctrl-colors { display: flex; gap: 6px; flex-wrap: wrap; }
+        .ctrl-color-btn { width: 32px; height: 32px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; transition: all .2s; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+        .ctrl-color-btn:hover { transform: scale(1.12); }
+        .ctrl-color-btn.active { border-color: var(--accent-cyan); box-shadow: 0 0 10px rgba(0,212,255,.5); }
+        .ctrl-color-btn.transparent-btn { background: repeating-linear-gradient(45deg,#333,#333 4px,#444 4px,#444 8px); }
+        .ctrl-btn-row { display: flex; gap: 8px; }
+        @media (max-width: 1000px) { .preview-body { grid-template-columns: 1fr 260px; } .preview-event-col { display: none; } }
+        @media (max-width: 700px) { .preview-body { grid-template-columns: 1fr; } .preview-ctrl-col { display: none; } }
+        #hiddenCanvas { position: fixed; left: -9999px; top: -9999px; width: 16px; height: 16px; }
+        ::-webkit-scrollbar { width: 7px; height: 7px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,.2); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 4px; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <header class="app-header">
+        <div class="app-logo">SP</div>
+        <div>
+            <h1 class="app-title">战斗技能 Spine hit_end 配置检查工具</h1>
+            <p class="app-subtitle">读取技能配置，加载 Spine 资源，检查多段技能的 hit_end 事件帧数量是否满足配置要求</p>
+        </div>
+    </header>
+
+    <div class="grid">
+        <aside class="panel">
+            <div class="panel-header">
+                <span class="panel-title">配置与扫描</span>
+                <span class="badge info">HTML工具</span>
+            </div>
+            <div class="panel-body section">
+                <label class="file-drop" :class="{ dragging: isDragging }" @dragover.prevent="isDragging=true" @dragleave.prevent="isDragging=false" @drop.prevent="onDropFiles" for="fileInput">
+                    <input id="fileInput" class="file-input" type="file" multiple accept=".json" @change="onPickFiles">
+                    <div><strong>点击或拖拽配置 JSON</strong></div>
+                    <div class="small muted">支持 skill_data*.json、effect_show_data.json、skill_effect_data.json</div>
+                </label>
+
+                <div class="small muted" v-if="uploadedFiles.length">已上传文件缓存：删除后不参与检查，可随时恢复。</div>
+                <div class="config-list" v-if="uploadedFiles.length">
+                    <div class="config-item" :class="{ disabled: !item.enabled }" v-for="item in uploadedFiles" :key="item.name">
+                        <span>{{ item.name }}</span>
+                        <span class="badge" :class="item.enabled ? 'pass' : 'skip'">{{ item.enabled ? item.type : '已删除' }}</span>
+                        <button class="btn btn-mini" :class="item.enabled ? 'btn-danger' : 'btn-success'" :disabled="isScanning" @click="toggleUploadFile(item.name)">{{ item.enabled ? '删除' : '恢复' }}</button>
+                    </div>
+                </div>
+                <div class="small warning" v-else>尚未加载配置。可一次性选择多个 JSON 文件。</div>
+                <div class="small danger" v-if="missingConfigTips.length">开始检查前还需要：{{ missingConfigTips.join('、') }}</div>
+
+                <div class="form-group">
+                    <label class="form-label">Spine 接口地址</label>
+                    <input class="input mono" v-model.trim="spineBaseUrl" placeholder="http://192.168.6.1/spine/index.php">
+                    <div class="small muted">文件列表会访问同域目录：{{ spinePageUrlPreview }}</div>
+                    <div class="small warning">如果本地 file:// 打开遇到跨域限制，请把本 HTML 放到 Spine 服务同源目录，或通过本地静态服务器代理访问。</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">技能ID过滤（可选）</label>
+                    <textarea class="textarea" v-model="skillFilterText" placeholder="不填则全量扫描。支持逗号、空格、换行分隔，如：101001, 101101"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">扫描选项</label>
+                    <select class="select" v-model="scanMode">
+                        <option value="all">全量检查按 hurt_group + condition_param 分组后有效表现数量 >= 2 的多段技能</option>
+                        <option value="filter">只检查输入的技能ID</option>
+                    </select>
+                </div>
+
+                <div class="btn-row">
+                    <button class="btn btn-primary" :disabled="isScanning || !canScan" :title="canScan ? '开始检查' : missingConfigTips.join('；')" @click="startScan">开始检查</button>
+                    <button class="btn btn-danger" :disabled="!isScanning" @click="stopScan">停止</button>
+                    <button class="btn" :disabled="isScanning" @click="clearResults">清空结果</button>
+                    <button class="btn btn-success" :disabled="!results.length" @click="exportReport">导出报告</button>
+                </div>
+
+                <div class="progress-wrap">
+                    <div class="small muted">{{ progressText }}</div>
+                    <div class="progress-bar"><div class="progress-value" :style="{ width: progressPercent + '%' }"></div></div>
+                </div>
+
+                <div class="log-box" v-if="logs.length">
+                    <div v-for="(log, index) in logs" :key="index" :class="log.level">[{{ log.time }}] {{ log.text }}</div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="panel">
+            <div class="panel-header">
+                <span class="panel-title">检查结果</span>
+                <div class="tabs">
+                    <button class="tab" :class="{ active: resultFilter==='all' }" @click="setResultFilter('all')">全部</button>
+                    <button class="tab" :class="{ active: resultFilter==='fail' }" @click="setResultFilter('fail')">失败</button>
+                    <button class="tab" :class="{ active: resultFilter==='skip' }" @click="setResultFilter('skip')">跳过</button>
+                    <button class="tab" :class="{ active: resultFilter==='pass' }" @click="setResultFilter('pass')">通过</button>
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="summary">
+                    <div class="summary-card"><div class="summary-label">候选技能进度</div><div class="summary-num">{{ progressCurrent }}/{{ progressTotal }}</div></div>
+                    <div class="summary-card"><div class="summary-label">结果项</div><div class="summary-num">{{ summary.total }}</div></div>
+                    <div class="summary-card"><div class="summary-label">通过</div><div class="summary-num success">{{ summary.pass }}</div></div>
+                    <div class="summary-card"><div class="summary-label">失败</div><div class="summary-num danger">{{ summary.fail }}</div></div>
+                    <div class="summary-card"><div class="summary-label">跳过</div><div class="summary-num warning">{{ summary.skip }}</div></div>
+                </div>
+
+                <div class="pager" v-if="filteredResults.length">
+                    <div class="small muted">当前显示 {{ pageStart }}-{{ pageEnd }} / 共 {{ filteredResults.length }} 条</div>
+                    <div class="pager-actions">
+                        <span class="small muted">每页</span>
+                        <select class="select pager-select" :value="pageSize" @change="setPageSize($event.target.value)">
+                            <option :value="10">10</option>
+                            <option :value="20">20</option>
+                            <option :value="50">50</option>
+                            <option :value="100">100</option>
+                        </select>
+                        <button class="btn pager-btn" :disabled="currentPage <= 1" @click="setCurrentPage(1)">首页</button>
+                        <button class="btn pager-btn" :disabled="currentPage <= 1" @click="setCurrentPage(currentPage - 1)">上一页</button>
+                        <span class="small muted">第 {{ currentPage }} / {{ totalPages }} 页</span>
+                        <button class="btn pager-btn" :disabled="currentPage >= totalPages" @click="setCurrentPage(currentPage + 1)">下一页</button>
+                        <button class="btn pager-btn" :disabled="currentPage >= totalPages" @click="setCurrentPage(totalPages)">末页</button>
+                    </div>
+                </div>
+
+                <div class="table-wrap" v-if="filteredResults.length">
+                    <table class="result-table" :style="{ width: resultTableWidth + 'px' }">
+                        <colgroup>
+                            <col v-for="col in resultColumns" :key="col.key" :style="{ width: col.width + 'px' }">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th v-for="col in resultColumns" :key="col.key">
+                                    <div class="th-inner">
+                                        <span>{{ col.label }}</span>
+                                        <span class="col-resizer" title="拖拽调整列宽" @mousedown.prevent="startResizeColumn($event, col)"></span>
+                                    </div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in pagedResults" :key="row.id">
+                                <td><div class="cell-scroll cell-nowrap"><span class="badge" :class="row.status">{{ statusText(row.status) }}</span></div></td>
+                                <td><div class="cell-scroll"><div class="mono">{{ row.skillId }}</div><div>{{ row.skillName || '-' }}</div><div class="muted">{{ row.owner || '' }}</div></div></td>
+                                <td><div class="cell-scroll"><span class="badge info">{{ row.isArea ? '群攻' : '单体' }}</span><div class="muted">target_type={{ row.targetType }}</div></div></td>
+                                <td><div class="cell-scroll mono">{{ row.effectListText }}<div class="muted">hurt_group：{{ row.hurtGroup || '未配置' }}</div><div class="muted">condition_param：{{ row.conditionLabel || '未配置' }}</div><div class="muted">本组效果：{{ row.hurtGroupEffectListText || '-' }}</div><div class="muted">有表现：{{ row.showCount }} 个，期望：{{ row.expectedHitEnd }} 个</div></div></td>
+                                <td><div class="cell-scroll mono small">effectBid={{ row.effectBid }}<br>effectShowId={{ row.effectShowId || '-' }}<br>showId={{ row.showId || '-' }}</div></td>
+                                <td><div class="cell-scroll mono small">{{ row.spineId || '-' }}<br>{{ row.actionName || '-' }}<br><span class="muted">file={{ row.fileKey || '-' }}</span></div></td>
+                                <td><div class="cell-scroll cell-nowrap"><span :class="row.actualHitEnd >= row.expectedHitEnd ? 'success' : 'danger'">{{ row.actualHitEndText }}</span></div></td>
+                                <td><div class="cell-scroll"><span class="badge" :class="row.status">{{ row.reason || '-' }}</span></div></td>
+                                <td><div class="cell-scroll cell-nowrap"><button class="btn btn-danger" v-if="row.status === 'fail'" @click="openPreview(row)">预览</button></div></td>
+                                <td><div class="cell-scroll small">{{ row.message }}</div></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-else class="small muted">暂无结果。请加载配置后点击开始检查。</div>
+            </div>
+        </main>
+    </div>
+    <div class="preview-mask" v-if="preview.visible">
+        <div class="preview-dialog">
+            <div class="preview-header">
+                <div>
+                    <div class="panel-title">Spine 预览：{{ preview.row?.spineId }} / {{ preview.row?.actionName }}</div>
+                    <div class="small muted">技能 {{ preview.row?.skillId }}，期望 hit_end {{ preview.row?.expectedHitEnd }} 个，实际 {{ preview.row?.actualHitEndText }} 个</div>
+                </div>
+                <button class="btn" @click="closePreview">关闭</button>
+            </div>
+            <div class="preview-body">
+                <!-- 左：Canvas 渲染区 -->
+                <div class="preview-canvas-col" id="previewCanvasCol" :style="{ backgroundColor: preview.ctrl.bgColor === 'transparent' ? 'transparent' : preview.ctrl.bgColor }">
+                    <div class="small warning" v-if="preview.loading" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;">正在加载预览...</div>
+                    <div class="small danger" v-if="preview.error" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);max-width:90%;text-align:center;z-index:2;">{{ preview.error }}</div>
+                    <canvas id="previewCanvas" width="1024" height="1280" style="display:block;width:auto;height:100%;max-width:100%;"></canvas>
+                </div>
+                <!-- 中：播放控制 -->
+                <div class="preview-ctrl-col">
+                    <div class="ctrl-group">
+                        <div class="ctrl-label">文件选择</div>
+                        <select class="select" v-model="preview.selectedFile" @change="reloadPreviewSelected" style="padding:7px 9px;font-size:12px;">
+                            <option v-for="file in preview.fileKeys" :key="file" :value="file">{{ file }}</option>
+                        </select>
+                    </div>
+                    <div class="ctrl-group">
+                        <div class="ctrl-label">动作选择</div>
+                        <select class="select" v-model="preview.selectedAction" @change="playPreviewSelectedAction" style="padding:7px 9px;font-size:12px;">
+                            <option v-for="action in preview.actions" :key="action" :value="action">{{ action }}</option>
+                        </select>
+                    </div>
+                    <!-- 循环播放 -->
+                    <div class="ctrl-group">
+                        <div class="ctrl-check-row">
+                            <input type="checkbox" id="pvLoop" v-model="preview.ctrl.isLoop" @change="onPreviewLoopChange">
+                            <label for="pvLoop">循环播放</label>
+                            <button class="btn" style="margin-left:auto;padding:6px 12px;font-size:12px;" @click="playPreviewOnce">播放一次</button>
+                        </div>
+                    </div>
+                    <!-- 播放速度 -->
+                    <div class="ctrl-group">
+                        <div class="ctrl-label">播放速度</div>
+                        <div class="ctrl-slider-row">
+                            <input type="range" class="ctrl-slider" min="1" max="30" v-model="preview.ctrl.timeScale" @input="onPreviewSpeedChange">
+                            <span class="ctrl-val">{{ (preview.ctrl.timeScale * 0.1).toFixed(1) }}</span>
+                        </div>
+                    </div>
+                    <!-- 动画缩放 -->
+                    <div class="ctrl-group">
+                        <div class="ctrl-label">动画缩放</div>
+                        <div class="ctrl-slider-row">
+                            <input type="range" class="ctrl-slider" min="1" max="20" v-model="preview.ctrl.spineScale" @input="onPreviewScaleChange">
+                            <span class="ctrl-val">{{ (preview.ctrl.spineScale * 0.1).toFixed(1) }}</span>
+                        </div>
+                    </div>
+                    <!-- 播放进度 -->
+                    <div class="ctrl-group">
+                        <div class="ctrl-label">播放进度</div>
+                        <div class="ctrl-slider-row">
+                            <input type="range" class="ctrl-slider" min="0" :max="preview.ctrl.maxProgress" v-model="preview.ctrl.progress" @mousedown="onPreviewProgressDown" @mouseup="onPreviewProgressUp" @input="onPreviewProgressInput">
+                            <span class="ctrl-val">{{ preview.ctrl.progress }}ms</span>
+                        </div>
+                    </div>
+                    <!-- 背景颜色 -->
+                    <div class="ctrl-group">
+                        <div class="ctrl-label">背景颜色</div>
+                        <div class="ctrl-colors">
+                            <button class="ctrl-color-btn transparent-btn" :class="{ active: preview.ctrl.bgColor === 'transparent' }" title="透明" @click="setPreviewBg('transparent')"><span style="color:#fff;font-size:10px;text-shadow:0 1px 2px rgba(0,0,0,.6);">无</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#ffffff' }" style="background:#fff;" title="白" @click="setPreviewBg('#ffffff')"><span style="color:#333;font-size:10px;">白</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#000000' }" style="background:#000;" title="黑" @click="setPreviewBg('#000000')"><span style="color:#fff;font-size:10px;">黑</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#ef4444' }" style="background:#ef4444;" title="红" @click="setPreviewBg('#ef4444')"><span style="color:#fff;font-size:10px;">红</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#10b981' }" style="background:#10b981;" title="绿" @click="setPreviewBg('#10b981')"><span style="color:#fff;font-size:10px;">绿</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#3b82f6' }" style="background:#3b82f6;" title="蓝" @click="setPreviewBg('#3b82f6')"><span style="color:#fff;font-size:10px;">蓝</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#f59e0b' }" style="background:#f59e0b;" title="橙" @click="setPreviewBg('#f59e0b')"><span style="color:#fff;font-size:10px;">橙</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#eab308' }" style="background:#eab308;" title="黄" @click="setPreviewBg('#eab308')"><span style="color:#333;font-size:10px;">黄</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#06b6d4' }" style="background:#06b6d4;" title="青" @click="setPreviewBg('#06b6d4')"><span style="color:#fff;font-size:10px;">青</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#8b5cf6' }" style="background:#8b5cf6;" title="紫" @click="setPreviewBg('#8b5cf6')"><span style="color:#fff;font-size:10px;">紫</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#6b7280' }" style="background:#6b7280;" title="灰" @click="setPreviewBg('#6b7280')"><span style="color:#fff;font-size:10px;">灰</span></button>
+                            <button class="ctrl-color-btn" :class="{ active: preview.ctrl.bgColor === '#ec4899' }" style="background:#ec4899;" title="粉" @click="setPreviewBg('#ec4899')"><span style="color:#fff;font-size:10px;">粉</span></button>
+                        </div>
+                    </div>
+                </div>
+                <!-- 右：事件帧列表 -->
+                <div class="preview-event-col">
+                    <div class="col-title">事件帧列表（当前动作）</div>
+                    <div class="event-list" v-if="preview.events.length">
+                        <div class="event-item" :class="{ hit: event.name === 'hit_end' }" v-for="(event, index) in preview.events" :key="index">
+                            <span class="mono">{{ event.name }}</span>
+                            <span class="mono">{{ event.time.toFixed(3) }}s</span>
+                        </div>
+                    </div>
+                    <div class="event-list" v-else>
+                        <div class="event-item"><span class="muted">暂无事件帧</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <canvas id="hiddenCanvas" width="16" height="16"></canvas>
+</div>
+
+<script>
+const { createApp, computed, ref, nextTick } = Vue;
+
+createApp({
+    setup() {
+        const isDragging = ref(false);
+        const loadedFiles = ref({});
+        const loadedFileList = ref([]);
+        const uploadedFiles = ref([]);
+        const skillFilterText = ref('');
+        const scanMode = ref('all');
+        const spineBaseUrl = ref('http://192.168.6.1/spine/index.php');
+        const results = ref([]);
+        const logs = ref([]);
+        const isScanning = ref(false);
+        const shouldStop = ref(false);
+        const progressCurrent = ref(0);
+        const progressTotal = ref(0);
+        const progressLabel = ref('等待开始');
+        const resultFilter = ref('all');
+        const pageSize = ref(20);
+        const currentPage = ref(1);
+        const resultColumns = ref([
+            { key: 'status', label: '状态', width: 82, minWidth: 70 },
+            { key: 'skill', label: '技能', width: 150, minWidth: 110 },
+            { key: 'type', label: '类型', width: 105, minWidth: 90 },
+            { key: 'effects', label: '效果列表', width: 170, minWidth: 120 },
+            { key: 'route', label: '表现链路', width: 210, minWidth: 150 },
+            { key: 'spine', label: 'Spine / 动作', width: 240, minWidth: 160 },
+            { key: 'hitEnd', label: 'hit_end', width: 90, minWidth: 80 },
+            { key: 'reason', label: '原因', width: 150, minWidth: 110 },
+            { key: 'action', label: '操作', width: 88, minWidth: 78 },
+            { key: 'detail', label: '详情', width: 360, minWidth: 180 },
+        ]);
+        const preview = ref({ visible: false, loading: false, error: '', row: null, events: [], fileKeys: [], actions: [], selectedFile: '', selectedAction: '', ctrl: { isLoop: true, timeScale: 10, spineScale: 10, progress: 0, maxProgress: 1000, bgColor: 'transparent' } });
+        const spineCache = new Map();
+        let gl = null;
+        let previewGl = null;
+        let previewRenderer = null;
+        let previewSkeleton = null;
+        let previewState = null;
+        let previewFrameId = 0;
+        let previewLastTime = 0;
+        let previewPlaying = false;
+        let previewProgressDragging = false;
+        let previewSkeletonOffsetX = 0;
+        let previewSkeletonOffsetY = 0;
+
+        const canScan = computed(() => !!loadedFiles.value.effectShowData && !!loadedFiles.value.skillEffectData && Object.keys(loadedFiles.value.skillDataMap || {}).length > 0);
+        const missingConfigTips = computed(() => {
+            const tips = [];
+            if (!loadedFiles.value.effectShowData) tips.push('effect_show_data.json');
+            if (!loadedFiles.value.skillEffectData) tips.push('skill_effect_data.json');
+            if (!Object.keys(loadedFiles.value.skillDataMap || {}).length) tips.push('skill_data*.json');
+            return tips;
+        });
+        const progressPercent = computed(() => progressTotal.value ? Math.round(progressCurrent.value / progressTotal.value * 100) : 0);
+        const progressText = computed(() => `${progressLabel.value}（${progressCurrent.value}/${progressTotal.value}）`);
+        const spinePageUrlPreview = computed(() => {
+            const url = normalizeBaseUrl(spineBaseUrl.value);
+            return url.replace(/\/index\.php(?:\?.*)?$/i, '/');
+        });
+        const filteredResults = computed(() => {
+            if (resultFilter.value === 'all') return results.value;
+            return results.value.filter(item => item.status === resultFilter.value);
+        });
+        const totalPages = computed(() => Math.max(1, Math.ceil(filteredResults.value.length / pageSize.value)));
+        const pagedResults = computed(() => {
+            const safePage = Math.min(currentPage.value, totalPages.value);
+            const start = (safePage - 1) * pageSize.value;
+            return filteredResults.value.slice(start, start + pageSize.value);
+        });
+        const pageStart = computed(() => filteredResults.value.length ? (Math.min(currentPage.value, totalPages.value) - 1) * pageSize.value + 1 : 0);
+        const pageEnd = computed(() => Math.min(filteredResults.value.length, Math.min(currentPage.value, totalPages.value) * pageSize.value));
+        const resultTableWidth = computed(() => resultColumns.value.reduce((sum, col) => sum + col.width, 0));
+        const summary = computed(() => {
+            const skillSet = new Set(results.value.map(item => item.skillId));
+            return {
+                skills: skillSet.size,
+                total: results.value.length,
+                pass: results.value.filter(item => item.status === 'pass').length,
+                fail: results.value.filter(item => item.status === 'fail').length,
+                skip: results.value.filter(item => item.status === 'skip').length,
+            };
+        });
+
+        function setResultFilter(filter) {
+            resultFilter.value = filter;
+            currentPage.value = 1;
+        }
+
+        function setPageSize(size) {
+            pageSize.value = Number(size) || 20;
+            currentPage.value = 1;
+        }
+
+        function setCurrentPage(page) {
+            const target = Math.max(1, Math.min(Number(page) || 1, totalPages.value));
+            currentPage.value = target;
+        }
+
+        function startResizeColumn(event, col) {
+            const startX = event.clientX;
+            const startWidth = col.width;
+            const onMove = moveEvent => {
+                const nextWidth = Math.max(col.minWidth || 80, startWidth + moveEvent.clientX - startX);
+                col.width = nextWidth;
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            };
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        }
+
+        function normalizeBaseUrl(url) {
+            const trimmed = (url || '').trim();
+            if (!trimmed) return 'http://192.168.6.1/spine/index.php';
+            if (/\/spine\/?$/i.test(trimmed)) return trimmed.replace(/\/$/, '') + '/index.php';
+            return trimmed;
+        }
+
+        function addLog(text, level = 'muted') {
+            const date = new Date();
+            const time = [date.getHours(), date.getMinutes(), date.getSeconds()].map(v => String(v).padStart(2, '0')).join(':');
+            logs.value.unshift({ text, level, time });
+            if (logs.value.length > 80) logs.value.pop();
+        }
+
+        function onDropFiles(event) {
+            isDragging.value = false;
+            readFiles(Array.from(event.dataTransfer.files || []));
+        }
+
+        function onPickFiles(event) {
+            readFiles(Array.from(event.target.files || []));
+            event.target.value = '';
+        }
+
+        async function readFiles(files) {
+            const jsonFiles = files.filter(file => file.name.toLowerCase().endsWith('.json'));
+            if (!jsonFiles.length) {
+                addLog('未选择 JSON 文件', 'warning');
+                return;
+            }
+            for (const file of jsonFiles) {
+                try {
+                    const text = await file.text();
+                    const data = JSON.parse(text);
+                    cacheUploadFile(file.name, data);
+                    addLog(`加载配置：${file.name}`, 'success');
+                } catch (error) {
+                    addLog(`配置解析失败：${file.name}，${error.message}`, 'danger');
+                }
+            }
+            rebuildEnabledConfig();
+        }
+
+        function getConfigType(fileName, data) {
+            const lowerName = fileName.toLowerCase();
+            if (lowerName.includes('effect_show_data') || data.data_get_show_data || data.data_get_show_id || data.data_get_show2_id) return '表现配置';
+            if (lowerName.includes('skill_effect_data') || data.data_get_effect_data) return '特效配置';
+            if (lowerName.includes('skill_data') || data.data_get_skill || data.data_get_effect_desc) return '技能配置';
+            return '未知配置';
+        }
+
+        function cacheUploadFile(fileName, data) {
+            const oldIndex = uploadedFiles.value.findIndex(item => item.name === fileName);
+            const item = { name: fileName, type: getConfigType(fileName, data), data, enabled: true };
+            if (oldIndex >= 0) {
+                const next = uploadedFiles.value.slice();
+                next[oldIndex] = item;
+                uploadedFiles.value = next;
+            } else {
+                uploadedFiles.value = [...uploadedFiles.value, item];
+            }
+        }
+
+        function toggleUploadFile(fileName) {
+            uploadedFiles.value = uploadedFiles.value.map(item => item.name === fileName ? { ...item, enabled: !item.enabled } : item);
+            rebuildEnabledConfig();
+            addLog(`${uploadedFiles.value.find(item => item.name === fileName)?.enabled ? '恢复' : '删除'}配置：${fileName}`, 'info');
+        }
+
+        function rebuildEnabledConfig() {
+            loadedFiles.value = {};
+            for (const item of uploadedFiles.value) {
+                if (!item.enabled) continue;
+                mergeConfig(item.name, item.data);
+            }
+            rebuildLoadedFileList();
+        }
+
+        function mergeConfig(fileName, data) {
+            const lowerName = fileName.toLowerCase();
+            const next = { ...loadedFiles.value };
+            if (!next.skillDataMap) next.skillDataMap = {};
+            if (!next.effectDescMap) next.effectDescMap = {};
+
+            if (lowerName.includes('effect_show_data')) {
+                next.effectShowData = data;
+                return loadedFiles.value = next;
+            }
+            if (lowerName.includes('skill_effect_data')) {
+                next.skillEffectData = data;
+                return loadedFiles.value = next;
+            }
+            if (lowerName.includes('skill_data')) {
+                if (data.data_get_skill) Object.assign(next.skillDataMap, data.data_get_skill);
+                if (data.data_get_effect_desc) Object.assign(next.effectDescMap, data.data_get_effect_desc);
+                return loadedFiles.value = next;
+            }
+            if (data.data_get_show_data || data.data_get_show_id || data.data_get_show2_id) {
+                next.effectShowData = data;
+                return loadedFiles.value = next;
+            }
+            if (data.data_get_effect_data) {
+                next.skillEffectData = data;
+                return loadedFiles.value = next;
+            }
+            if (data.data_get_skill || data.data_get_effect_desc) {
+                if (data.data_get_skill) Object.assign(next.skillDataMap, data.data_get_skill);
+                if (data.data_get_effect_desc) Object.assign(next.effectDescMap, data.data_get_effect_desc);
+                return loadedFiles.value = next;
+            }
+            addLog(`无法识别配置类型：${fileName}`, 'warning');
+        }
+
+        function rebuildLoadedFileList() {
+            const list = [];
+            if (loadedFiles.value.effectShowData) list.push({ name: 'effect_show_data.json', type: '表现配置' });
+            if (loadedFiles.value.skillEffectData) list.push({ name: 'skill_effect_data.json', type: '特效配置' });
+            const skillCount = Object.keys(loadedFiles.value.skillDataMap || {}).length;
+            if (skillCount) list.push({ name: `skill_data*.json（${skillCount}个技能）`, type: '技能配置' });
+            const effectDescCount = Object.keys(loadedFiles.value.effectDescMap || {}).length;
+            if (effectDescCount) list.push({ name: `data_get_effect_desc（${effectDescCount}个效果）`, type: '效果描述' });
+            loadedFileList.value = list;
+        }
+
+        function parseSkillFilter() {
+            const ids = skillFilterText.value.split(/[\s,，;；]+/).map(item => item.trim()).filter(Boolean);
+            return new Set(ids.map(item => String(Number(item) || item)));
+        }
+
+        function getSkillCandidates() {
+            const skillMap = loadedFiles.value.skillDataMap || {};
+            const filter = parseSkillFilter();
+            const useFilter = scanMode.value === 'filter' || filter.size > 0;
+            const list = [];
+            for (const skillId in skillMap) {
+                if (useFilter && !filter.has(String(skillId))) continue;
+                const skill = skillMap[skillId];
+                const effectList = Array.isArray(skill.effect_list) ? skill.effect_list : [];
+                const groups = buildEffectShowGroups(effectList);
+                const maxShowCount = groups.reduce((max, group) => Math.max(max, group.showCount), 0);
+                if (groups.some(group => group.showCount >= 2)) list.push({ skillId, skill, showCount: maxShowCount, hurtGroupCount: groups.length });
+            }
+            return list.sort((a, b) => Number(a.skillId) - Number(b.skillId));
+        }
+
+        function getEffectBid(effectBidRaw) {
+            if (effectBidRaw && typeof effectBidRaw === 'object') {
+                return String(effectBidRaw.bid || effectBidRaw.effect_bid || effectBidRaw.effectBid || effectBidRaw.id || '');
+            }
+            return String(effectBidRaw || '');
+        }
+
+        function normalizeHurtGroup(value) {
+            if (value === undefined || value === null || value === '' || value === 0 || value === '0') {
+                return { key: '__default_hurt_group__', label: '未配置' };
+            }
+            return { key: String(value), label: String(value) };
+        }
+
+        function stableStringify(value) {
+            if (value === undefined || value === null || value === '' || value === 0 || value === '0') return '__default_condition__';
+            if (Array.isArray(value)) return `[${value.map(item => stableStringify(item)).join(',')}]`;
+            if (typeof value === 'object') {
+                const keys = Object.keys(value).sort();
+                return `{${keys.map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+            }
+            return JSON.stringify(value);
+        }
+
+        function normalizeConditionParam(value) {
+            if (value === undefined || value === null || value === '' || value === 0 || value === '0') {
+                return { key: '__default_condition__', label: '未配置' };
+            }
+            const key = stableStringify(value);
+            return { key, label: typeof value === 'object' ? JSON.stringify(value) : String(value) };
+        }
+
+        function getEffectHurtGroup(effectBidRaw, effectDesc) {
+            const rawHurtGroup = effectBidRaw && typeof effectBidRaw === 'object' && Object.prototype.hasOwnProperty.call(effectBidRaw, 'hurt_group') ? effectBidRaw.hurt_group : undefined;
+            const descHurtGroup = effectDesc && Object.prototype.hasOwnProperty.call(effectDesc, 'hurt_group') ? effectDesc.hurt_group : undefined;
+            return normalizeHurtGroup(rawHurtGroup !== undefined ? rawHurtGroup : descHurtGroup);
+        }
+
+        function getEffectConditionParam(effectBidRaw, effectDesc) {
+            const rawCondition = effectBidRaw && typeof effectBidRaw === 'object' && Object.prototype.hasOwnProperty.call(effectBidRaw, 'condition_param') ? effectBidRaw.condition_param : undefined;
+            const descCondition = effectDesc && Object.prototype.hasOwnProperty.call(effectDesc, 'condition_param') ? effectDesc.condition_param : undefined;
+            return normalizeConditionParam(rawCondition !== undefined ? rawCondition : descCondition);
+        }
+
+        function buildEffectShowGroups(effectList) {
+            const map = new Map();
+            for (const effectBidRaw of effectList || []) {
+                const effectBid = getEffectBid(effectBidRaw);
+                if (!effectBid) continue;
+                const show = resolveShowConfig(effectBid);
+                const hurtGroup = getEffectHurtGroup(effectBidRaw, show.effectDesc);
+                const condition = getEffectConditionParam(effectBidRaw, show.effectDesc);
+                const groupKey = `${hurtGroup.key}|${condition.key}`;
+                if (!map.has(groupKey)) {
+                    map.set(groupKey, { groupKey, hurtGroup: hurtGroup.label, conditionKey: condition.key, conditionLabel: condition.label, effectBids: [], validShows: [], showCount: 0 });
+                }
+                const group = map.get(groupKey);
+                group.effectBids.push(effectBid);
+                if (show.showCfg && show.showId && Number(show.showCfg.show_id || 0) !== 0) {
+                    group.validShows.push({ effectBid, show });
+                    group.showCount++;
+                }
+            }
+            return Array.from(map.values());
+        }
+
+        function getEffectShowCount(effectList) {
+            return buildEffectShowGroups(effectList).reduce((sum, group) => sum + group.showCount, 0);
+        }
+
+        function resolveShowConfig(effectBid) {
+            const files = loadedFiles.value;
+            const effectShowData = files.effectShowData || {};
+            const effectDesc = (files.effectDescMap || {})[effectBid];
+            const effectShowId = effectDesc ? Number(effectDesc.effect_show_id || 0) : 0;
+            let showId = 0;
+            let show2Cfg = null;
+            let route = 'old';
+            if (effectShowId && effectShowData.data_get_show2_id && effectShowData.data_get_show2_id[effectShowId]) {
+                show2Cfg = effectShowData.data_get_show2_id[effectShowId];
+                if (typeof show2Cfg === 'number') showId = show2Cfg;
+                else showId = Number(show2Cfg.show_id || 0);
+                route = 'new';
+            }
+            if (!showId && effectShowData.data_get_show_id) {
+                const oldShow = effectShowData.data_get_show_id[effectBid];
+                if (typeof oldShow === 'number') showId = oldShow;
+                else if (oldShow && typeof oldShow === 'object') showId = Number(oldShow.show_id || 0);
+                route = 'old';
+            }
+            const showCfg = showId && effectShowData.data_get_show_data ? effectShowData.data_get_show_data[showId] : null;
+            return { effectBid, effectDesc, effectShowId, showId, showCfg, show2Cfg, route };
+        }
+
+        function buildCheckItems(skillId, skill) {
+            const effectList = Array.isArray(skill.effect_list) ? skill.effect_list : [];
+            const groups = buildEffectShowGroups(effectList).filter(group => group.showCount >= 2);
+            const items = [];
+            for (const group of groups) {
+                const expectedHitEnd = Math.max(0, group.showCount - 1);
+                const hasAreaShow = group.validShows.some(item => hasAreaEffectList(item.show));
+                const checkShows = hasAreaShow ? group.validShows.filter(item => hasAreaEffectList(item.show)) : group.validShows;
+                for (const item of checkShows) {
+                    const base = {
+                        skillId,
+                        skillName: skill.name || '',
+                        owner: skill.owner || '',
+                        targetType: skill.target_type,
+                        effectListText: JSON.stringify(effectList),
+                        hurtGroup: group.hurtGroup,
+                        conditionKey: group.conditionKey,
+                        conditionLabel: group.conditionLabel,
+                        groupKey: group.groupKey,
+                        hurtGroupEffectListText: group.effectBids.join(','),
+                        showCount: group.showCount,
+                        expectedHitEnd,
+                        effectBid: item.effectBid,
+                        effectShowId: item.show.effectShowId,
+                        showId: item.show.showId,
+                    };
+                    items.push(...buildShowCheckItems(base, item.show));
+                }
+            }
+            return mergeDuplicateCheckItems(items);
+        }
+
+        function hasAreaEffectList(show) {
+            return !!(show && show.showCfg && Array.isArray(show.showCfg.area_effect_list) && show.showCfg.area_effect_list.filter(Boolean).length > 0);
+        }
+
+        function buildShowCheckItems(base, show) {
+            const areaEffectList = Array.isArray(show.showCfg.area_effect_list) ? show.showCfg.area_effect_list.filter(Boolean) : [];
+            if (areaEffectList.length > 0) {
+                return buildAreaCheckItems(base, areaEffectList);
+            }
+            const spineId = show.show2Cfg && typeof show.show2Cfg === 'object' ? String(show.show2Cfg.skill_modle_res || '') : '';
+            const actionName = String(show.showCfg.anime_user_atk || '');
+            if (!spineId || spineId === '0') {
+                return [];
+            }
+            if (!actionName) {
+                return [{ ...base, isArea: false, status: 'skip', spineId, actionName, reason: '缺少动作名', message: '单体技能已配置表现，但缺少 anime_user_atk 动作名', actualHitEnd: -1, actualHitEndText: '-' }];
+            }
+            return [{ ...base, isArea: false, spineId, actionName, message: '待检查' }];
+        }
+
+        function mergeDuplicateCheckItems(items) {
+            const map = new Map();
+            for (const item of items) {
+                const key = [item.skillId, item.groupKey || `${item.hurtGroup || 'none'}|${item.conditionKey || 'none'}`, item.isArea ? 'area' : 'single', item.spineId || '', item.actionName || '', item.areaEffectId || '', item.areaTag || ''].join('|');
+                if (!map.has(key)) {
+                    map.set(key, item);
+                    continue;
+                }
+                const old = map.get(key);
+                old.effectBid = `${old.effectBid},${item.effectBid}`;
+                old.effectShowId = `${old.effectShowId || '-'},${item.effectShowId || '-'}`;
+                old.showId = `${old.showId || '-'},${item.showId || '-'}`;
+            }
+            return Array.from(map.values());
+        }
+
+        function buildAreaCheckItems(base, areaEffectList) {
+            const effectData = (loadedFiles.value.skillEffectData || {}).data_get_effect_data || {};
+            const alternatives = [];
+            const missingEffectIds = [];
+            const missingActionMsgs = [];
+            for (const effectId of areaEffectList) {
+                const cfg = effectData[effectId];
+                if (!cfg) {
+                    missingEffectIds.push(effectId);
+                    continue;
+                }
+                const pairs = [
+                    { spineId: cfg.res_up, actionName: cfg.up_action_name, tag: 'up' },
+                    { spineId: cfg.res_down, actionName: cfg.down_action_name, tag: 'down' },
+                ];
+                for (const pair of pairs) {
+                    const spineId = String(pair.spineId || '');
+                    const actionName = String(pair.actionName || '');
+                    if (!spineId || spineId === '0') continue;
+                    if (!actionName) {
+                        missingActionMsgs.push(`${effectId}/${pair.tag}`);
+                        continue;
+                    }
+                    alternatives.push({ effectId, spineId, actionName, tag: pair.tag });
+                }
+            }
+            if (alternatives.length) {
+                return [{
+                    ...base,
+                    isArea: true,
+                    spineId: alternatives.map(item => `${item.effectId}.${item.tag}:${item.spineId}`).join(' / '),
+                    actionName: alternatives.map(item => `${item.effectId}.${item.tag}:${item.actionName}`).join(' / '),
+                    areaEffectId: areaEffectList.join(','),
+                    areaTag: 'any',
+                    areaAlternatives: alternatives,
+                    areaMissingEffectIds: missingEffectIds,
+                    areaMissingActionMsgs: missingActionMsgs,
+                    message: `群攻特效 ${areaEffectList.join(',')}（area_effect_list 任意一个 Spine 资源通过即可）`,
+                }];
+            }
+            if (missingEffectIds.length) {
+                return [{ ...base, isArea: true, status: 'skip', reason: '群攻特效配置缺失', message: `找不到群攻特效配置：${missingEffectIds.join(',')}`, actualHitEnd: -1, actualHitEndText: '-' }];
+            }
+            if (missingActionMsgs.length) {
+                return [{ ...base, isArea: true, spineId: '', actionName: '', status: 'skip', reason: '群攻特效动作名缺失', message: `群攻特效 ${missingActionMsgs.join('、')} 缺少动作名，且无可检查候选`, actualHitEnd: -1, actualHitEndText: '-' }];
+            }
+            return [];
+        }
+
+        async function startScan() {
+            if (!canScan.value || isScanning.value) return;
+            isScanning.value = true;
+            shouldStop.value = false;
+            results.value = [];
+            currentPage.value = 1;
+            logs.value = [];
+
+            const candidates = getSkillCandidates();
+            progressCurrent.value = 0;
+            progressTotal.value = candidates.length;
+            progressLabel.value = `准备检查 ${candidates.length} 个候选技能`;
+            addLog(`候选技能：${candidates.length}。将按 hurt_group + condition_param 组合分组；未配置 hurt_group 或 condition_param 会作为默认值参与同组归并。`, 'info');
+
+            let checkedItemCount = 0;
+            let ignoredNoShowCount = 0;
+            for (let i = 0; i < candidates.length; i++) {
+                if (shouldStop.value) break;
+                const candidate = candidates[i];
+                progressLabel.value = `解析技能 ${candidate.skillId}`;
+
+                const items = buildCheckItems(candidate.skillId, candidate.skill);
+                if (!items.length) {
+                    ignoredNoShowCount++;
+                    progressCurrent.value++;
+                    if (i % 20 === 0) await nextFrame();
+                    continue;
+                }
+
+                for (const item of items) {
+                    if (shouldStop.value) break;
+                    checkedItemCount++;
+                    progressLabel.value = `${item.skillId} ${item.spineId || ''}/${item.actionName || ''}`;
+                    await checkOneItem(item);
+                    await nextFrame();
+                }
+                progressCurrent.value++;
+                if (i % 10 === 0) await nextFrame();
+            }
+
+            progressLabel.value = shouldStop.value ? '已停止' : '检查完成';
+            addLog(`${progressLabel.value}：检查项 ${checkedItemCount} 个，忽略无表现技能 ${ignoredNoShowCount} 个。`, shouldStop.value ? 'warning' : 'success');
+            isScanning.value = false;
+        }
+
+        async function checkOneItem(item) {
+            if (item.status === 'skip') {
+                results.value.push(finalizeRow(item));
+                return;
+            }
+            if (item.isArea && Array.isArray(item.areaAlternatives) && item.areaAlternatives.length) {
+                await checkAreaAlternativeItem(item);
+                return;
+            }
+            try {
+                const hitEndInfo = await getHitEndCount(item.spineId, item.actionName);
+                const pass = hitEndInfo.count >= item.expectedHitEnd;
+                results.value.push(finalizeRow({
+                    ...item,
+                    status: pass ? 'pass' : 'fail',
+                    reason: pass ? '检查通过' : 'hit_end 数量不足',
+                    actualHitEnd: hitEndInfo.count,
+                    actualHitEndText: String(hitEndInfo.count),
+                    fileKey: hitEndInfo.fileKey,
+                    message: pass ? `通过：${item.message}` : `失败原因：hit_end 数量不足。期望至少 ${item.expectedHitEnd} 个，实际 ${hitEndInfo.count} 个。${item.message}`,
+                }));
+            } catch (error) {
+                results.value.push(finalizeRow({
+                    ...item,
+                    status: 'skip',
+                    reason: 'Spine 加载或解析失败',
+                    actualHitEnd: -1,
+                    actualHitEndText: '-',
+                    message: `跳过原因：加载或解析 Spine 失败。${error.message}`,
+                }));
+            }
+        }
+
+        async function checkAreaAlternativeItem(item) {
+            const details = [];
+            const effectIdsWithHitEnd = new Set();
+            let bestInfo = null;
+            let passInfo = null;
+            for (const alt of item.areaAlternatives) {
+                try {
+                    const hitEndInfo = await getHitEndCount(alt.spineId, alt.actionName);
+                    const pass = hitEndInfo.count >= item.expectedHitEnd;
+                    const info = { ...hitEndInfo, ...alt, pass };
+                    details.push(`${alt.effectId}.${alt.tag}:${alt.spineId}/${alt.actionName}=${hitEndInfo.count}`);
+                    if (hitEndInfo.count > 0) effectIdsWithHitEnd.add(String(alt.effectId));
+                    if (!bestInfo || hitEndInfo.count > bestInfo.count) bestInfo = info;
+                    if (pass && !passInfo) passInfo = info;
+                } catch (error) {
+                    details.push(`${alt.effectId}.${alt.tag}:${alt.spineId}/${alt.actionName}=加载或解析失败(${error.message})`);
+                }
+            }
+            const warningText = effectIdsWithHitEnd.size > 1 ? `警告：area_effect_list 中存在多个 effectId 含 hit_end（${Array.from(effectIdsWithHitEnd).join(',')}），预期有且仅有 1 个 effectId 资源包含 hit_end。` : '';
+            const extraTips = [];
+            if (Array.isArray(item.areaMissingEffectIds) && item.areaMissingEffectIds.length) extraTips.push(`缺失配置：${item.areaMissingEffectIds.join(',')}`);
+            if (Array.isArray(item.areaMissingActionMsgs) && item.areaMissingActionMsgs.length) extraTips.push(`缺动作：${item.areaMissingActionMsgs.join('、')}`);
+            const suffix = [warningText, ...extraTips].filter(Boolean).join(' ');
+            if (passInfo) {
+                results.value.push(finalizeRow({
+                    ...item,
+                    spineId: passInfo.spineId,
+                    actionName: passInfo.actionName,
+                    areaEffectId: passInfo.effectId,
+                    areaTag: passInfo.tag,
+                    status: 'pass',
+                    reason: warningText ? '检查通过（多特效含 hit_end）' : '检查通过',
+                    actualHitEnd: passInfo.count,
+                    actualHitEndText: String(passInfo.count),
+                    fileKey: passInfo.fileKey,
+                    message: `通过：area_effect_list 中 ${passInfo.effectId}.${passInfo.tag} 资源 hit_end 达标，任意一个 Spine 资源通过即可。明细：${details.join('；')}${suffix ? `。${suffix}` : ''}`,
+                }));
+                return;
+            }
+            if (!bestInfo) {
+                results.value.push(finalizeRow({
+                    ...item,
+                    status: 'skip',
+                    reason: 'Spine 加载或解析失败',
+                    actualHitEnd: -1,
+                    actualHitEndText: '-',
+                    fileKey: '',
+                    message: `跳过原因：area_effect_list 中所有 Spine 资源均加载或解析失败。明细：${details.join('；')}${suffix ? `。${suffix}` : ''}`,
+                }));
+                return;
+            }
+            results.value.push(finalizeRow({
+                ...item,
+                spineId: bestInfo.spineId,
+                actionName: bestInfo.actionName,
+                areaEffectId: bestInfo.effectId,
+                areaTag: bestInfo.tag,
+                status: 'fail',
+                reason: warningText ? 'hit_end 数量不足（多特效含 hit_end）' : 'hit_end 数量不足',
+                actualHitEnd: bestInfo.count,
+                actualHitEndText: String(bestInfo.count),
+                fileKey: bestInfo.fileKey,
+                message: `失败原因：area_effect_list 中没有任意一个 Spine 资源达到期望 hit_end 数量 ${item.expectedHitEnd}。明细：${details.join('；')}${suffix ? `。${suffix}` : ''}`,
+            }));
+        }
+
+        function finalizeRow(row) {
+            return {
+                id: `${row.skillId}_${row.spineId || 'none'}_${row.actionName || 'none'}_${results.value.length}`,
+                actualHitEnd: typeof row.actualHitEnd === 'number' ? row.actualHitEnd : -1,
+                actualHitEndText: row.actualHitEndText || '-',
+                fileKey: row.fileKey || '',
+                status: row.status || 'skip',
+                reason: row.reason || '',
+                ...row,
+            };
+        }
+
+        function stopScan() {
+            shouldStop.value = true;
+            addLog('正在停止扫描，当前 Spine 解析结束后生效', 'warning');
+        }
+
+        function clearResults() {
+            results.value = [];
+            currentPage.value = 1;
+            logs.value = [];
+            progressCurrent.value = 0;
+            progressTotal.value = 0;
+            progressLabel.value = '等待开始';
+        }
+
+        async function getHitEndCount(spineId, actionName) {
+            if (!spineId || !actionName) throw new Error('缺少 Spine ID 或动作名');
+            const cacheKey = `${spineId}::${actionName}`;
+            if (spineCache.has(cacheKey)) return spineCache.get(cacheKey);
+            const files = await getSpineFiles(spineId);
+            const fileKeys = Object.keys(files);
+            if (!fileKeys.length) throw new Error(`未获取到 ${spineId} 的文件列表`);
+            let lastError = null;
+            for (const fileKey of fileKeys) {
+                try {
+                    const skeletonData = await loadSkeletonData(spineId, fileKey, files[fileKey] || []);
+                    const animation = skeletonData.animations.find(item => item.name === actionName);
+                    if (!animation) continue;
+                    const count = countAnimationEvent(animation, 'hit_end');
+                    const info = { count, fileKey };
+                    spineCache.set(cacheKey, info);
+                    return info;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+            if (lastError) throw lastError;
+            throw new Error(`动作不存在：${actionName}，已查找文件 ${fileKeys.join(', ')}`);
+        }
+
+        async function getSpineFiles(spineId) {
+            const cacheKey = `${spineId}::__files`;
+            if (spineCache.has(cacheKey)) return spineCache.get(cacheKey);
+            const base = normalizeBaseUrl(spineBaseUrl.value);
+            const pageUrl = base.replace(/\/index\.php(?:\?.*)?$/i, '/') + `?spine_id=${encodeURIComponent(spineId)}&time=${Date.now()}`;
+            const response = await fetch(pageUrl, { cache: 'no-store' });
+            if (!response.ok) throw new Error(`文件列表请求失败：HTTP ${response.status}`);
+            const html = await response.text();
+            const match = html.match(/const\s+data\s*=\s*(\{[\s\S]*?\});/);
+            if (!match) throw new Error('无法从页面解析 files 数据');
+            const data = JSON.parse(match[1]);
+            const files = data.files || {};
+            spineCache.set(cacheKey, files);
+            return files;
+        }
+
+        async function loadSkeletonData(spineId, fileKey, pngFiles, targetGl = null) {
+            const useGl = targetGl || ensureWebgl();
+            const base = normalizeBaseUrl(spineBaseUrl.value);
+            const assetManager = new spine.webgl.AssetManager(useGl);
+            const fileUrl = fileName => `${base}?spine_id=${encodeURIComponent(spineId)}&spine_file=${fileName}`;
+            const skelUrl = fileUrl(`${fileKey}.skel`);
+            const atlasUrl = fileUrl(`${fileKey}.atlas`);
+
+            // 第一阶段：先加载 skeleton 与 atlas 文本。事件帧解析只需要 skel，但渲染必须保证 atlas 引用的贴图都已加载。
+            assetManager.loadBinary(skelUrl);
+            assetManager.loadText(atlasUrl);
+            await waitAssetManager(assetManager, 15000);
+
+            const atlasText = assetManager.get(atlasUrl);
+            const textureFiles = new Set();
+            textureFiles.add(`${fileKey}.png`);
+            for (const pngFile of pngFiles || []) {
+                const name = String(pngFile || '').trim();
+                if (name) textureFiles.add(/\.(png|jpg|jpeg|webp)$/i.test(name) ? name : `${name}.png`);
+            }
+            for (const page of parseAtlasTexturePages(atlasText)) {
+                textureFiles.add(page);
+            }
+
+            // 第二阶段：按 atlas 实际 page 名加载贴图，避免只解析到事件、但无附件贴图可绘制导致画布空白。
+            for (const textureFile of textureFiles) {
+                assetManager.loadTexture(fileUrl(textureFile));
+            }
+            await waitAssetManager(assetManager, 15000);
+
+            const atlas = new spine.TextureAtlas(atlasText, path => {
+                const directUrl = fileUrl(path);
+                const direct = safeAssetGet(assetManager, directUrl);
+                if (direct) return direct;
+                const normalized = /\.(png|jpg|jpeg|webp)$/i.test(path) ? path : `${path}.png`;
+                return safeAssetGet(assetManager, fileUrl(normalized));
+            });
+            const atlasLoader = new spine.AtlasAttachmentLoader(atlas);
+            const skeletonBinary = new spine.SkeletonBinary(atlasLoader);
+            return skeletonBinary.readSkeletonData(assetManager.get(skelUrl));
+        }
+
+        function parseAtlasTexturePages(atlasText) {
+            const pages = [];
+            const lines = String(atlasText || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (/\.(png|jpg|jpeg|webp)$/i.test(line)) {
+                    pages.push(line);
+                    continue;
+                }
+                const next = lines[i + 1] || '';
+                if (!line.includes(':') && /^size\s*:/i.test(next)) {
+                    pages.push(line);
+                }
+            }
+            return pages;
+        }
+
+        function safeAssetGet(assetManager, url) {
+            try {
+                return assetManager.get(url);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function ensureWebgl() {
+            if (gl) return gl;
+            const canvas = document.getElementById('hiddenCanvas');
+            gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            if (!gl) throw new Error('浏览器不支持 WebGL，无法解析 Spine');
+            return gl;
+        }
+
+        function waitAssetManager(assetManager, timeoutMs) {
+            const start = Date.now();
+            return new Promise((resolve, reject) => {
+                const tick = () => {
+                    if (assetManager.isLoadingComplete()) return resolve();
+                    if (Date.now() - start > timeoutMs) return reject(new Error('Spine 资源加载超时'));
+                    requestAnimationFrame(tick);
+                };
+                tick();
+            });
+        }
+
+        function countAnimationEvent(animation, eventName) {
+            let count = 0;
+            for (const timeline of animation.timelines || []) {
+                if (timeline instanceof spine.EventTimeline) {
+                    for (const event of timeline.events || []) {
+                        if (event && event.data && event.data.name === eventName) count++;
+                    }
+                }
+            }
+            return count;
+        }
+
+        function collectAnimationEvents(animation) {
+            const list = [];
+            for (const timeline of animation.timelines || []) {
+                if (timeline instanceof spine.EventTimeline) {
+                    for (let i = 0; i < timeline.frames.length; i++) {
+                        const event = timeline.events[i];
+                        list.push({
+                            name: event?.data?.name || '',
+                            time: timeline.frames[i] || 0,
+                        });
+                    }
+                }
+            }
+            return list.sort((a, b) => a.time - b.time);
+        }
+
+        async function openPreview(row) {
+            closePreviewRenderOnly();
+            preview.value = {
+                visible: true,
+                loading: true,
+                error: '',
+                row,
+                events: [],
+                fileKeys: [],
+                actions: [],
+                selectedFile: row.fileKey || '',
+                selectedAction: row.actionName || '',
+                ctrl: { isLoop: true, timeScale: 10, spineScale: 10, progress: 0, maxProgress: 1000, bgColor: 'transparent' }
+            };
+            await nextTick();
+            await nextFrame();
+            try {
+                const files = await getSpineFiles(row.spineId);
+                const fileKeys = Object.keys(files);
+                if (!fileKeys.length) throw new Error(`未获取到 ${row.spineId} 的文件列表`);
+                const selectedFile = row.fileKey && files[row.fileKey] !== undefined ? row.fileKey : fileKeys[0];
+                preview.value = { ...preview.value, fileKeys, selectedFile };
+                await loadPreviewSpine(selectedFile, row.actionName);
+            } catch (error) {
+                preview.value = { ...preview.value, loading: false, error: error.message };
+            }
+        }
+
+        async function loadPreviewSpine(fileKey, preferActionName = '') {
+            closePreviewRenderOnly();
+            preview.value = { ...preview.value, loading: true, error: '', events: [], actions: [], selectedFile: fileKey };
+            await nextTick();
+            await nextFrame();
+            try {
+                const row = preview.value.row;
+                const canvas = document.getElementById('previewCanvas');
+                previewGl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!previewGl) throw new Error('浏览器不支持 WebGL，无法预览 Spine');
+                previewRenderer = new spine.webgl.SceneRenderer(canvas, previewGl, { premultipliedAlpha: true });
+
+                const files = await getSpineFiles(row.spineId);
+                const skeletonData = await loadSkeletonData(row.spineId, fileKey, files[fileKey] || [], previewGl);
+                const actions = skeletonData.animations.map(item => item.name);
+                const selectedAction = actions.includes(preferActionName) ? preferActionName : (actions.includes(row.actionName) ? row.actionName : actions[0]);
+                if (!selectedAction) throw new Error(`文件 ${fileKey} 下没有动作`);
+                const animation = skeletonData.animations.find(item => item.name === selectedAction);
+
+                previewSkeleton = new spine.Skeleton(skeletonData);
+                previewSkeleton.scaleX = preview.value.ctrl.spineScale * 0.1;
+                previewSkeleton.scaleY = preview.value.ctrl.spineScale * 0.1;
+                previewSkeleton.x = 0;
+                previewSkeleton.y = 0;
+
+                const animationStateData = new spine.AnimationStateData(previewSkeleton.data);
+                previewState = new spine.AnimationState(animationStateData);
+                const entry = previewState.setAnimation(0, selectedAction, preview.value.ctrl.isLoop);
+                entry.timeScale = preview.value.ctrl.timeScale * 0.1;
+                previewLastTime = Date.now() / 1000;
+                previewPlaying = true;
+
+                const maxMs = Math.round(animation.duration * 1000);
+                preview.value = {
+                    ...preview.value,
+                    loading: false,
+                    selectedFile: fileKey,
+                    selectedAction,
+                    actions,
+                    events: collectAnimationEvents(animation),
+                    ctrl: { ...preview.value.ctrl, maxProgress: maxMs || 1000, progress: 0 }
+                };
+                renderPreview();
+            } catch (error) {
+                preview.value = { ...preview.value, loading: false, error: error.message };
+            }
+        }
+
+        function calculateSkeletonBounds(skeleton) {
+            skeleton.setToSetupPose();
+            skeleton.updateWorldTransform();
+            const offset = new spine.Vector2();
+            const size = new spine.Vector2();
+            skeleton.getBounds(offset, size, []);
+            return { offset, size };
+        }
+
+        function calcAutoScale(skeleton, canvasW, canvasH) {
+            // 以 scale=1 计算骨骼包围盒，再反算让骨骼填充 canvas 的 60%
+            skeleton.scaleX = 1;
+            skeleton.scaleY = 1;
+            const bounds = calculateSkeletonBounds(skeleton);
+            const bw = bounds.size.x || 1;
+            const bh = bounds.size.y || 1;
+            const fitScale = Math.min((canvasW * 0.6) / bw, (canvasH * 0.6) / bh);
+            // 限定在 0.01 ~ 5 之间
+            return Math.min(5, Math.max(0.01, fitScale));
+        }
+
+        function renderPreview() {
+            if (!preview.value.visible || !previewRenderer || !previewSkeleton || !previewState || !previewGl) return;
+            const now = Date.now() / 1000;
+            const delta = now - previewLastTime;
+            previewLastTime = now;
+
+            previewGl.clearColor(0, 0, 0, 0);
+            previewGl.clear(previewGl.COLOR_BUFFER_BIT);
+
+            if (previewPlaying && !previewProgressDragging) {
+                previewState.update(delta);
+                const cur = previewState.getCurrent(0);
+                if (cur) {
+                    const duration = preview.value.ctrl.maxProgress / 1000 || 1;
+                    const ms = Math.round((cur.trackTime % duration) * 1000);
+                    preview.value.ctrl.progress = Math.min(Math.max(ms, 0), preview.value.ctrl.maxProgress);
+                }
+            }
+
+            previewState.apply(previewSkeleton);
+            previewSkeleton.updateWorldTransform();
+
+            previewRenderer.camera.position.x = previewSkeleton.x;
+            previewRenderer.camera.position.y = previewSkeleton.y;
+            previewRenderer.resize();
+            previewRenderer.begin();
+            previewRenderer.drawSkeleton(previewSkeleton, false);
+            previewRenderer.end();
+
+            previewFrameId = requestAnimationFrame(renderPreview);
+        }
+
+        function onPreviewLoopChange() {
+            if (!previewState || !preview.value.selectedAction) return;
+            const cur = previewState.getCurrent(0);
+            const currentTime = cur ? cur.trackTime : 0;
+            const entry = previewState.setAnimation(0, preview.value.selectedAction, preview.value.ctrl.isLoop);
+            entry.trackTime = currentTime;
+            entry.timeScale = preview.value.ctrl.timeScale * 0.1;
+            previewPlaying = true;
+        }
+
+        function playPreviewOnce() {
+            if (!previewState || !preview.value.selectedAction) return;
+            preview.value.ctrl.isLoop = false;
+            const entry = previewState.setAnimation(0, preview.value.selectedAction, false);
+            entry.timeScale = preview.value.ctrl.timeScale * 0.1;
+            previewPlaying = true;
+        }
+
+        function onPreviewSpeedChange() {
+            if (!previewState) return;
+            const entry = previewState.getCurrent(0);
+            if (entry) entry.timeScale = preview.value.ctrl.timeScale * 0.1;
+        }
+
+        function onPreviewScaleChange() {
+            if (!previewSkeleton) return;
+            const scale = preview.value.ctrl.spineScale * 0.1;
+            previewSkeleton.scaleX = scale;
+            previewSkeleton.scaleY = scale;
+        }
+
+        function onPreviewProgressDown() {
+            previewProgressDragging = true;
+        }
+
+        function onPreviewProgressInput() {
+            if (!previewState || !previewSkeleton || !preview.value.selectedAction) return;
+            const timeSec = preview.value.ctrl.progress / 1000;
+            const entry = previewState.setAnimation(0, preview.value.selectedAction, false);
+            entry.timeScale = 0;
+            entry.trackTime = timeSec;
+            previewState.apply(previewSkeleton);
+            previewSkeleton.updateWorldTransform();
+            if (previewRenderer && previewGl) {
+                previewGl.clearColor(0, 0, 0, 0);
+                previewGl.clear(previewGl.COLOR_BUFFER_BIT);
+                previewRenderer.camera.position.x = previewSkeleton.x;
+                previewRenderer.camera.position.y = previewSkeleton.y;
+                previewRenderer.resize();
+                previewRenderer.begin();
+                previewRenderer.drawSkeleton(previewSkeleton, false);
+                previewRenderer.end();
+            }
+        }
+
+        function onPreviewProgressUp() {
+            previewProgressDragging = false;
+            if (!previewState || !preview.value.selectedAction) return;
+            const timeSec = preview.value.ctrl.progress / 1000;
+            const entry = previewState.setAnimation(0, preview.value.selectedAction, preview.value.ctrl.isLoop);
+            entry.trackTime = timeSec;
+            entry.timeScale = preview.value.ctrl.timeScale * 0.1;
+            previewPlaying = true;
+            previewLastTime = Date.now() / 1000;
+        }
+
+        function setPreviewBg(color) {
+            preview.value.ctrl.bgColor = color;
+        }
+
+        async function reloadPreviewSelected() {
+            if (!preview.value.selectedFile) return;
+            await loadPreviewSpine(preview.value.selectedFile, preview.value.selectedAction);
+        }
+
+        function playPreviewSelectedAction() {
+            if (!previewState || !previewSkeleton || !preview.value.selectedAction) return;
+            const animation = previewSkeleton.data.animations.find(item => item.name === preview.value.selectedAction);
+            if (!animation) return;
+            const entry = previewState.setAnimation(0, preview.value.selectedAction, preview.value.ctrl.isLoop);
+            entry.timeScale = preview.value.ctrl.timeScale * 0.1;
+            preview.value.events = collectAnimationEvents(animation);
+            preview.value.ctrl.progress = 0;
+            preview.value.ctrl.maxProgress = Math.round(animation.duration * 1000) || 1000;
+            previewPlaying = true;
+            previewLastTime = Date.now() / 1000;
+        }
+
+        function closePreviewRenderOnly() {
+            if (previewFrameId) cancelAnimationFrame(previewFrameId);
+            previewFrameId = 0;
+            previewRenderer = null;
+            previewSkeleton = null;
+            previewState = null;
+            previewGl = null;
+            previewPlaying = false;
+            previewProgressDragging = false;
+        }
+
+        function closePreview() {
+            closePreviewRenderOnly();
+            preview.value = { visible: false, loading: false, error: '', row: null, events: [], fileKeys: [], actions: [], selectedFile: '', selectedAction: '', ctrl: { isLoop: true, timeScale: 10, spineScale: 10, progress: 0, maxProgress: 1000, bgColor: 'transparent' } };
+        }
+
+        function nextFrame() {
+            return new Promise(resolve => requestAnimationFrame(resolve));
+        }
+
+        function statusText(status) {
+            if (status === 'pass') return '通过';
+            if (status === 'fail') return '失败';
+            if (status === 'skip') return '跳过';
+            return status;
+        }
+
+        function exportReport() {
+            const report = {
+                exportTime: new Date().toISOString(),
+                summary: summary.value,
+                results: results.value,
+            };
+            const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `battle_spine_hit_end_report_${Date.now()}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        return {
+            isDragging,
+            loadedFileList,
+            uploadedFiles,
+            skillFilterText,
+            scanMode,
+            spineBaseUrl,
+            spinePageUrlPreview,
+            results,
+            logs,
+            isScanning,
+            canScan,
+            missingConfigTips,
+            progressPercent,
+            progressText,
+            progressCurrent,
+            progressTotal,
+            resultFilter,
+            pageSize,
+            currentPage,
+            resultColumns,
+            resultTableWidth,
+            totalPages,
+            pagedResults,
+            pageStart,
+            pageEnd,
+            preview,
+            filteredResults,
+            summary,
+            onDropFiles,
+            onPickFiles,
+            toggleUploadFile,
+            setResultFilter,
+            setPageSize,
+            setCurrentPage,
+            startResizeColumn,
+            startScan,
+            stopScan,
+            clearResults,
+            exportReport,
+            openPreview,
+            closePreview,
+            statusText,
+            onPreviewLoopChange,
+            playPreviewOnce,
+            onPreviewSpeedChange,
+            onPreviewScaleChange,
+            onPreviewProgressDown,
+            onPreviewProgressUp,
+            onPreviewProgressInput,
+            setPreviewBg,
+            reloadPreviewSelected,
+            playPreviewSelectedAction,
+        };
+    }
+}).mount('#app');
+</script>
+</body>
+</html>
