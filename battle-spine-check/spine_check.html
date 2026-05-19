@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>战斗技能 Spine hit_end 配置检查工具</title>
-    <script src="./Spine 动画预览_files/vue.global.js.下载"></script>
-    <script src="./Spine 动画预览_files/spine-webgl.js.下载"></script>
+    <script src="./libs/vue.global.js"></script>
+    <script src="./libs/spine-webgl.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -150,7 +150,7 @@
         .config-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
         .config-item {
             display: grid;
-            grid-template-columns: 1fr auto auto;
+            grid-template-columns: auto minmax(0, 1fr) auto auto;
             align-items: center;
             gap: 10px;
             padding: 8px 10px;
@@ -161,6 +161,11 @@
             font-size: 12px;
         }
         .config-item.disabled { opacity: .55; border-style: dashed; }
+        .config-check { width: 18px; height: 18px; accent-color: var(--accent-cyan); cursor: pointer; }
+        .config-name { min-width: 0; overflow: hidden; }
+        .config-name-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+        .config-meta { margin-top: 3px; color: var(--text-muted); font-size: 11px; }
+        .config-actions { display: flex; align-items: center; gap: 6px; }
         .btn-mini { padding: 5px 9px; border-radius: 7px; font-size: 12px; font-weight: 700; }
         .progress-wrap { display: flex; flex-direction: column; gap: 8px; }
         .progress-bar { height: 10px; background: rgba(0,0,0,.32); border-radius: 999px; overflow: hidden; }
@@ -255,15 +260,23 @@
                     <div class="small muted">支持 skill_data*.json、effect_show_data.json、skill_effect_data.json</div>
                 </label>
 
-                <div class="small muted" v-if="uploadedFiles.length">已上传文件缓存：删除后不参与检查，可随时恢复。</div>
+                <div class="small muted" v-if="cacheLoading">正在读取浏览器缓存...</div>
+                <div class="small muted" v-if="uploadedFiles.length">已上传文件缓存会保存在当前浏览器中，勾选的文件会参与检查。</div>
                 <div class="config-list" v-if="uploadedFiles.length">
                     <div class="config-item" :class="{ disabled: !item.enabled }" v-for="item in uploadedFiles" :key="item.name">
-                        <span>{{ item.name }}</span>
-                        <span class="badge" :class="item.enabled ? 'pass' : 'skip'">{{ item.enabled ? item.type : '已删除' }}</span>
-                        <button class="btn btn-mini" :class="item.enabled ? 'btn-danger' : 'btn-success'" :disabled="isScanning" @click="toggleUploadFile(item.name)">{{ item.enabled ? '删除' : '恢复' }}</button>
+                        <input class="config-check" type="checkbox" :checked="item.enabled" :disabled="isScanning || cacheLoading" :aria-label="`${item.enabled ? '停用' : '启用'} ${item.name}`" @change="toggleUploadFile(item.name)">
+                        <div class="config-name" :title="item.name">
+                            <div class="config-name-main">{{ item.name }}</div>
+                            <div class="config-meta">{{ formatFileSize(item.size) }}<span v-if="item.updatedAt"> · {{ formatCacheTime(item.updatedAt) }}</span></div>
+                        </div>
+                        <span class="badge" :class="item.enabled ? 'pass' : 'skip'">{{ item.enabled ? item.type : '未启用' }}</span>
+                        <div class="config-actions">
+                            <button class="btn btn-mini" :class="item.enabled ? '' : 'btn-success'" :disabled="isScanning || cacheLoading" @click="toggleUploadFile(item.name)">{{ item.enabled ? '停用' : '启用' }}</button>
+                            <button class="btn btn-mini btn-danger" :disabled="isScanning || cacheLoading" @click="removeCachedFile(item.name)">移除</button>
+                        </div>
                     </div>
                 </div>
-                <div class="small warning" v-else>尚未加载配置。可一次性选择多个 JSON 文件。</div>
+                <div class="small warning" v-else-if="!cacheLoading">尚未加载配置。可一次性选择多个 JSON 文件。</div>
                 <div class="small danger" v-if="missingConfigTips.length">开始检查前还需要：{{ missingConfigTips.join('、') }}</div>
 
                 <div class="form-group">
@@ -477,7 +490,11 @@
 </div>
 
 <script>
-const { createApp, computed, ref, nextTick } = Vue;
+if (!window.Vue || !window.spine) {
+    document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f0f1a;color:#fff;font-family:Microsoft YaHei,Noto Sans SC,sans-serif;padding:24px;"><div style="max-width:720px;padding:20px 24px;border:1px solid rgba(255,255,255,.14);border-radius:14px;background:#252540;"><div style="font-size:18px;font-weight:700;margin-bottom:10px;">工具依赖文件缺失</div><div style="line-height:1.7;color:#b8b8c8;">请确认 HTML 同级目录下存在 <span style="font-family:Consolas,monospace;color:#93c5fd;">Spine 动画预览_files/vue.global.js.下载</span> 和 <span style="font-family:Consolas,monospace;color:#93c5fd;">Spine 动画预览_files/spine-webgl.js.下载</span>。</div></div></div>';
+    throw new Error('工具依赖文件缺失：Vue 或 spine-webgl 未加载');
+}
+const { createApp, computed, ref, nextTick, onMounted } = Vue;
 
 createApp({
     setup() {
@@ -485,6 +502,7 @@ createApp({
         const loadedFiles = ref({});
         const loadedFileList = ref([]);
         const uploadedFiles = ref([]);
+        const cacheLoading = ref(false);
         const skillFilterText = ref('');
         const scanMode = ref('all');
         const spineBaseUrl = ref('http://192.168.6.1/spine/index.php');
@@ -523,6 +541,10 @@ createApp({
         let previewProgressDragging = false;
         let previewSkeletonOffsetX = 0;
         let previewSkeletonOffsetY = 0;
+        const cacheDbName = 'battle-spine-hit-end-tool';
+        const cacheDbVersion = 1;
+        const cacheStoreName = 'uploaded-config-files';
+        let cacheDbPromise = null;
 
         const canScan = computed(() => !!loadedFiles.value.effectShowData && !!loadedFiles.value.skillEffectData && Object.keys(loadedFiles.value.skillDataMap || {}).length > 0);
         const missingConfigTips = computed(() => {
@@ -610,6 +632,108 @@ createApp({
             if (logs.value.length > 80) logs.value.pop();
         }
 
+        function openCacheDb() {
+            if (!('indexedDB' in window)) return Promise.reject(new Error('当前浏览器不支持 IndexedDB 持久缓存'));
+            if (cacheDbPromise) return cacheDbPromise;
+            cacheDbPromise = new Promise((resolve, reject) => {
+                const request = indexedDB.open(cacheDbName, cacheDbVersion);
+                request.onupgradeneeded = event => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(cacheStoreName)) {
+                        db.createObjectStore(cacheStoreName, { keyPath: 'name' });
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error || new Error('打开 IndexedDB 失败'));
+            });
+            return cacheDbPromise;
+        }
+
+        async function readCacheStore(readonlyFn, mode = 'readonly') {
+            const db = await openCacheDb();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(cacheStoreName, mode);
+                const store = transaction.objectStore(cacheStoreName);
+                const request = readonlyFn(store);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error || new Error('读取缓存失败'));
+                transaction.onerror = () => reject(transaction.error || new Error('访问缓存失败'));
+            });
+        }
+
+        async function loadCachedFiles() {
+            cacheLoading.value = true;
+            try {
+                const items = await readCacheStore(store => store.getAll());
+                uploadedFiles.value = (items || [])
+                    .filter(item => item && item.name && item.data)
+                    .map(item => ({
+                        name: item.name,
+                        type: item.type || getConfigType(item.name, item.data),
+                        data: item.data,
+                        enabled: item.enabled !== false,
+                        size: Number(item.size || 0),
+                        updatedAt: item.updatedAt || 0,
+                    }))
+                    .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+                rebuildEnabledConfig();
+                if (uploadedFiles.value.length) addLog(`已从浏览器缓存恢复 ${uploadedFiles.value.length} 个配置文件`, 'success');
+            } catch (error) {
+                addLog(`读取浏览器缓存失败：${error.message}`, 'warning');
+            } finally {
+                cacheLoading.value = false;
+            }
+        }
+
+        async function persistCachedFile(item) {
+            try {
+                await readCacheStore(store => store.put({
+                    name: item.name,
+                    type: item.type,
+                    data: item.data,
+                    enabled: item.enabled !== false,
+                    size: Number(item.size || 0),
+                    updatedAt: item.updatedAt || Date.now(),
+                }), 'readwrite');
+            } catch (error) {
+                addLog(`写入浏览器缓存失败：${item.name}，${error.message}`, 'warning');
+            }
+        }
+
+        async function persistCachedEnabled(fileName, enabled) {
+            try {
+                const oldItem = await readCacheStore(store => store.get(fileName));
+                if (!oldItem) return;
+                await readCacheStore(store => store.put({ ...oldItem, enabled, updatedAt: oldItem.updatedAt || Date.now() }), 'readwrite');
+            } catch (error) {
+                addLog(`更新缓存状态失败：${fileName}，${error.message}`, 'warning');
+            }
+        }
+
+        async function deleteCachedFile(fileName) {
+            try {
+                await readCacheStore(store => store.delete(fileName), 'readwrite');
+            } catch (error) {
+                addLog(`移除浏览器缓存失败：${fileName}，${error.message}`, 'warning');
+            }
+        }
+
+        function formatFileSize(size) {
+            const bytes = Number(size || 0);
+            if (!bytes) return '大小未知';
+            if (bytes < 1024) return `${bytes} B`;
+            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+            return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+        }
+
+        function formatCacheTime(timestamp) {
+            const time = Number(timestamp || 0);
+            if (!time) return '';
+            const date = new Date(time);
+            const pad = value => String(value).padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
         function onDropFiles(event) {
             isDragging.value = false;
             readFiles(Array.from(event.dataTransfer.files || []));
@@ -630,8 +754,9 @@ createApp({
                 try {
                     const text = await file.text();
                     const data = JSON.parse(text);
-                    cacheUploadFile(file.name, data);
-                    addLog(`加载配置：${file.name}`, 'success');
+                    const item = cacheUploadFile(file.name, data, file.size);
+                    await persistCachedFile(item);
+                    addLog(`加载并缓存配置：${file.name}`, 'success');
                 } catch (error) {
                     addLog(`配置解析失败：${file.name}，${error.message}`, 'danger');
                 }
@@ -647,9 +772,9 @@ createApp({
             return '未知配置';
         }
 
-        function cacheUploadFile(fileName, data) {
+        function cacheUploadFile(fileName, data, size = 0) {
             const oldIndex = uploadedFiles.value.findIndex(item => item.name === fileName);
-            const item = { name: fileName, type: getConfigType(fileName, data), data, enabled: true };
+            const item = { name: fileName, type: getConfigType(fileName, data), data, enabled: true, size: Number(size || 0), updatedAt: Date.now() };
             if (oldIndex >= 0) {
                 const next = uploadedFiles.value.slice();
                 next[oldIndex] = item;
@@ -657,12 +782,24 @@ createApp({
             } else {
                 uploadedFiles.value = [...uploadedFiles.value, item];
             }
+            uploadedFiles.value = uploadedFiles.value.slice().sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+            return item;
         }
 
         function toggleUploadFile(fileName) {
-            uploadedFiles.value = uploadedFiles.value.map(item => item.name === fileName ? { ...item, enabled: !item.enabled } : item);
+            const oldItem = uploadedFiles.value.find(item => item.name === fileName);
+            const nextEnabled = !(oldItem && oldItem.enabled);
+            uploadedFiles.value = uploadedFiles.value.map(item => item.name === fileName ? { ...item, enabled: nextEnabled } : item);
             rebuildEnabledConfig();
-            addLog(`${uploadedFiles.value.find(item => item.name === fileName)?.enabled ? '恢复' : '删除'}配置：${fileName}`, 'info');
+            persistCachedEnabled(fileName, nextEnabled);
+            addLog(`${nextEnabled ? '启用' : '停用'}配置：${fileName}`, 'info');
+        }
+
+        function removeCachedFile(fileName) {
+            uploadedFiles.value = uploadedFiles.value.filter(item => item.name !== fileName);
+            rebuildEnabledConfig();
+            deleteCachedFile(fileName);
+            addLog(`已从缓存移除配置：${fileName}`, 'info');
         }
 
         function rebuildEnabledConfig() {
@@ -1537,10 +1674,15 @@ createApp({
             URL.revokeObjectURL(url);
         }
 
+        onMounted(() => {
+            loadCachedFiles();
+        });
+
         return {
             isDragging,
             loadedFileList,
             uploadedFiles,
+            cacheLoading,
             skillFilterText,
             scanMode,
             spineBaseUrl,
@@ -1569,6 +1711,9 @@ createApp({
             onDropFiles,
             onPickFiles,
             toggleUploadFile,
+            removeCachedFile,
+            formatFileSize,
+            formatCacheTime,
             setResultFilter,
             setPageSize,
             setCurrentPage,

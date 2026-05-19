@@ -1,0 +1,453 @@
+---
+alwaysApply: false
+description: 战斗技能 Spine hit_end 配置检查工具开发上下文恢复说明
+---
+
+# 战斗技能 Spine hit_end 配置检查工具上下文
+
+## 用途
+
+当新窗口继续维护 `战斗技能 Spine hit_end 配置检查工具` 时，优先读取本文件恢复上下文。
+
+当前工具是一个独立 HTML：
+
+`g:\临时\战斗技能Spine_hit_end检查工具.html`
+
+对应开发计划：
+
+`d:\Work\smzz_gy\client\.cursor\plans\战斗技能spine检查工具_3f892a37.plan.md`
+
+## 背景
+
+该工具用于检查战斗技能配置中的动作 Spine / 技能特效 Spine 是否和多段技能配置中的 `hit_end` 事件帧数量匹配。
+
+战斗逻辑要求：
+
+- 一个 `hit_end` 事件帧，对应一次多段技能效果配置推进。
+- 单体技能多段绑定在角色动作 Spine 上。
+- 群攻技能多段绑定在技能范围特效 Spine 上。
+
+业务代码参考：
+
+- `assets/scripts/mod/battle/BattleModel.ts:1599-1605`
+- `assets/scripts/mod/battle/BattleConfigUtils.ts:135-162`
+- `assets/scripts/mod/battle/SkillAct.ts` 中 `hit_end` / `multistage_end` 处理逻辑。
+
+## 当前界面能力
+
+### 结果列表
+
+- 表头支持拖拽调整每列宽度。
+- 列宽变窄后，单元格内容不撑高整行，超出内容可在单元格内部滚动查看。
+- 行高随内容自适应，但单元格最大高度限制为约 5 行文本，避免长详情把列表撑得过高。
+
+## 关键业务判定
+
+### 多段技能筛选
+
+当前工具侧按策划要求筛选：
+
+```text
+遍历 skill_data*.json -> data_get_skill[skillId].effect_list
+读取每个 effectBid 对应效果配置的 hurt_group 与 condition_param
+hurt_group 相同且 condition_param 相同，才归为同一组多段效果
+未配置 hurt_group / hurt_group 为 0 / 空值，也视为相同默认 hurt_group，继续参与 condition_param 分组
+未配置 condition_param / condition_param 为 0 / 空值，也视为相同默认条件
+condition_param 可能是多层嵌套结构，必须递归比较到最内层元素完全一致，才认为条件相同
+对每个组合分组内的 effectBid 按业务表现链路查找 showCfg
+有效表现条件：showCfg 存在 && showCfg.show_id != 0
+showCount = 当前 hurt_group + condition_param 分组内的有效表现数量
+showCount >= 2 时，该分组才视为需要检查的多段表现
+同一个技能可能生成多个独立组合分组检查项
+```
+
+期望 `hit_end` 数量：
+
+```text
+expectedHitEnd = 当前 hurt_group + condition_param 分组的 showCount - 1
+```
+
+注意：不能仅使用 `effect_list.length - 1`，也不能把整个 `effect_list` 的有效表现直接合并计算。`effect_list` 内可能存在无表现的 effectBid；必须按 `hurt_group + condition_param` 组合归组后分别计算 showCount 和 expectedHitEnd。未配置 `hurt_group` 的效果不再排除，而是归入默认 hurt_group 后继续按 condition_param 判定是否同组。
+
+### 是否有表现
+
+必须按业务逻辑判断是否有表现，不能只看 `effect_list[0]`。
+
+业务代码等价逻辑：
+
+```ts
+const effectConfig = BattleConfigUtils.getBattleEffectShowCfgByEffectBid(effectBid, attacker.useSkin);
+const needShowEffect = effectBid && effectConfig && effectConfig.show_id != 0;
+```
+
+工具实现要求：
+
+1. 遍历 `effect_list` 内每个 `effectBid`。
+2. 读取每个 `effectBid` 对应效果配置的 `hurt_group` 和 `condition_param`。
+3. `hurt_group` 相同且 `condition_param` 递归规范化后完全一致的 `effectBid` 归为同一组。
+4. 未配置 `hurt_group` 归入默认 hurt_group；未配置 `condition_param` 归入默认条件。
+5. 每个组合分组内的 `effectBid` 都按 `BattleConfigUtils.getBattleEffectShowCfgByEffectBid` 等价链路查表现。
+6. 只要某个组合分组内有效表现数量 `showCount >= 2`，该分组就纳入检查。
+7. 全部分组都不满足 `showCount >= 2` 时，直接忽略该技能，不显示 Skip。
+
+表现查表链路：
+
+```text
+effectBid
+  -> skill_data*.data_get_effect_desc[effectBid].effect_show_id
+  -> effect_show_data.data_get_show2_id[effectShowId].show_id
+  -> effect_show_data.data_get_show_data[showId]
+
+若上述查不到 showId：
+  -> effect_show_data.data_get_show_id[effectBid]
+  -> effect_show_data.data_get_show_data[showId]
+```
+
+有效表现条件：
+
+```text
+showCfg 存在 && showCfg.show_id != 0
+```
+
+## 单体 / 群攻规则
+
+### 单体
+
+判断：
+
+```text
+showCfg.area_effect_list 为空
+```
+
+检查资源：
+
+```text
+effect_show_data.data_get_show2_id[effectShowId].skill_modle_res
+showCfg.anime_user_atk
+```
+
+注意：
+
+- `skill_modle_res` 为空或 `0` 时，工具无法定位角色模型 Spine，当前直接忽略该表现项。
+- `anime_user_atk` 为空时显示 `Skip`，原因：缺少动作名。
+
+### 群攻
+
+判断：
+
+```text
+showCfg.area_effect_list 非空
+```
+
+优先级：
+
+```text
+只要同一个技能的任意有效表现配置了 area_effect_list，就按群攻特效处理。
+此时不再检查角色模型 skill_modle_res 和角色动作 anime_user_atk 是否包含 hit_end。
+仅当所有有效表现都没有 area_effect_list 时，才按单体规则检查角色模型与动作。
+```
+
+检查资源：
+
+```text
+showCfg.area_effect_list[]
+  -> skill_effect_data.data_get_effect_data[effectId]
+  -> res_up + up_action_name
+  -> res_down + down_action_name
+```
+
+校验规则：
+
+```text
+area_effect_list 下所有 effectId 的 res_up / res_down 全部作为同一组候选 Spine 资源。
+只要任意 1 个候选资源的目标动作 hit_end 数量 >= expectedHitEnd，即视为该群攻表现通过。
+只有全部候选资源都不达标时，才判定失败。
+
+业务预期：area_effect_list 中有且仅有 1 个 effectId 的资源包含 hit_end 事件。
+如果多个 effectId 中都有任意资源出现 hit_end（hit_end 数量 > 0），检查结果仍按“任意一个达标”判定通过/失败，但必须附带警告提示。
+```
+
+跳过原因：
+
+- 找不到 `skill_effect_data` 条目：`群攻特效配置缺失`
+- 有资源但缺动作名：`群攻特效动作名缺失`
+
+## Spine 资源加载
+
+内网 Spine 服务：
+
+```text
+http://192.168.6.1/spine/index.php
+```
+
+接口：
+
+```text
+文件列表：GET http://192.168.6.1/spine/?spine_id={ID}
+skel：GET http://192.168.6.1/spine/index.php?spine_id={ID}&spine_file={key}.skel
+atlas：GET http://192.168.6.1/spine/index.php?spine_id={ID}&spine_file={key}.atlas
+png：GET http://192.168.6.1/spine/index.php?spine_id={ID}&spine_file={key}.png
+```
+
+文件列表从返回 HTML 中解析：
+
+```js
+const data = {...}
+```
+
+如果直接本地 `file://` 打开遇到跨域问题，需要把 HTML 放到 Spine 服务同源目录，或通过本地代理/静态服务访问。
+
+## Spine 事件帧解析
+
+工具使用：
+
+```html
+<script src="./Spine 动画预览_files/vue.global.js.下载"></script>
+<script src="./Spine 动画预览_files/spine-webgl.js.下载"></script>
+```
+
+解析流程：
+
+1. `spine.webgl.AssetManager` 加载 `.skel/.atlas/.png`
+2. `spine.TextureAtlas`
+3. `spine.AtlasAttachmentLoader`
+4. `spine.SkeletonBinary.readSkeletonData`
+5. 找到目标 `animation.name === actionName`
+6. 遍历 `animation.timelines`
+7. 判断 `timeline instanceof spine.EventTimeline`
+8. 统计 `event.data.name === "hit_end"`
+
+## 当前 UI 功能
+
+### 文件上传缓存
+
+当前工具支持上传文件缓存：
+
+- 上传 JSON 后会同时写入内存态 `uploadedFiles` 与浏览器 IndexedDB。
+- 刷新页面后通过 `onMounted -> loadCachedFiles()` 从 IndexedDB 恢复上传过的文件，并按上次启用状态重建 `loadedFiles`。
+- 文件列表使用 checkbox / 启用按钮控制是否参与检查；未启用文件保留在浏览器缓存中，但不参与 `rebuildEnabledConfig()`。
+- `移除` 会从 `uploadedFiles` 和 IndexedDB 中删除该文件缓存。
+- 同名上传会覆盖缓存并自动启用。
+- 每次启用/停用/移除都会调用 `rebuildEnabledConfig()` 重建 `loadedFiles`。
+
+关键函数：
+
+```text
+openCacheDb()
+loadCachedFiles()
+persistCachedFile(item)
+persistCachedEnabled(fileName, enabled)
+deleteCachedFile(fileName)
+cacheUploadFile(fileName, data)
+toggleUploadFile(fileName)
+removeCachedFile(fileName)
+rebuildEnabledConfig()
+mergeConfig(fileName, data)
+```
+
+### 扫描功能
+
+- 全量扫描：扫描所有 `effect_list` 中有效表现数量 `showCount >= 2` 的技能。
+- 过滤扫描：输入技能 ID，逗号、空格、换行均可。
+- 即使 `scanMode = all`，如果过滤框非空，也会使用过滤。
+
+### 卡顿优化
+
+点击开始检查时：
+
+- 不再一次性构建完整 pending 列表。
+- 按技能逐个构建检查项。
+- 每隔若干条 `await nextFrame()` 让出 UI 线程。
+- 进度展示为候选技能进度。
+
+### 结果展示
+
+结果列包括：
+
+- 状态
+- 技能
+- 类型
+- 效果列表
+- 表现链路
+- Spine / 动作
+- hit_end
+- 原因
+- 操作
+- 详情
+
+原因包括：
+
+```text
+hit_end 数量不足
+缺少动作名
+群攻特效配置缺失
+群攻特效动作名缺失
+Spine 加载或解析失败
+```
+
+无表现技能直接忽略，不进入结果表。
+
+### 失败项预览
+
+失败项有 `预览` 按钮。
+
+预览弹窗显示：
+
+- Spine 动画渲染
+- 当前动作事件帧列表
+- `hit_end` 高亮
+- 技能 ID / Spine ID / 动作名 / 期望与实际 `hit_end` 数量
+
+播放控制（弹窗中部控制面板）：
+
+- 循环播放（checkbox）+ 播放一次按钮
+- 播放速度（滑块，0.1x-3.0x）
+- 动画缩放（滑块，0.1x-3.0x）
+- 播放进度（滑块，拖拽可定格帧，松开恢复播放）
+- 背景颜色（12种颜色按钮，含透明）
+
+关键函数：
+
+```text
+openPreview(row)
+closePreview()
+renderPreview()
+collectAnimationEvents(animation)
+calculateSkeletonBounds(skeleton)
+onPreviewLoopChange()
+playPreviewOnce()
+onPreviewSpeedChange()
+onPreviewScaleChange()
+onPreviewProgressDown()
+onPreviewProgressUp()
+onPreviewProgressInput()
+setPreviewBg(color)
+```
+
+### 结果列表分页
+
+结果表不再直接渲染 `filteredResults` 全量数据，而是通过 `pagedResults` 只渲染当前页，避免大量 DOM 行导致页面卡顿。
+
+分页行为：
+
+- 支持每页 `10 / 20 / 50 / 100` 条。
+- 切换结果筛选 Tab 时重置到第 1 页。
+- 切换每页条数时重置到第 1 页。
+- 清空结果或重新开始检查时重置到第 1 页。
+- 导出报告仍导出完整 `results`，不受当前分页影响。
+
+关键状态/计算属性：
+
+```text
+pageSize
+currentPage
+totalPages
+pagedResults
+pageStart
+pageEnd
+setResultFilter(filter)
+setPageSize(size)
+setCurrentPage(page)
+```
+
+## 当前关键函数
+
+工具文件：`g:\临时\战斗技能Spine_hit_end检查工具.html`
+
+```text
+readFiles(files)
+cacheUploadFile(fileName, data)
+toggleUploadFile(fileName)
+rebuildEnabledConfig()
+mergeConfig(fileName, data)
+setResultFilter(filter)
+setPageSize(size)
+setCurrentPage(page)
+getSkillCandidates()
+getEffectBid(effectBidRaw)
+getEffectHurtGroup(effectBidRaw, effectDesc)
+getEffectConditionParam(effectBidRaw, effectDesc)
+stableStringify(value)
+buildEffectShowGroups(effectList)
+getEffectShowCount(effectList)
+resolveShowConfig(effectBid)
+buildCheckItems(skillId, skill)
+hasAreaEffectList(show)
+buildShowCheckItems(base, show)
+buildAreaCheckItems(base, areaEffectList)
+mergeDuplicateCheckItems(items)
+startScan()
+checkOneItem(item)
+checkAreaAlternativeItem(item)
+getHitEndCount(spineId, actionName)
+getSpineFiles(spineId)
+loadSkeletonData(...)
+countAnimationEvent(animation, eventName)
+collectAnimationEvents(animation)
+openPreview(row)
+loadPreviewSpine(fileKey, preferActionName)
+reloadPreviewSelected()
+playPreviewSelectedAction()
+exportReport()
+```
+
+## 已修复的重要问题
+
+1. 开始检查按钮无法点击
+   - 原因：必须加载 `effect_show_data.json`、`skill_effect_data.json` 和至少一个 `skill_data*.json`。
+   - 已增加缺失配置提示。
+
+2. 开始检查页面卡顿
+   - 原因：一次性构建大量检查项。
+   - 已改为分批构建、分批扫描。
+
+3. 无表现判定错误
+   - 原因：只看了 `effect_list[0]`。
+   - 已改为遍历所有 `effectBid` 并按业务查表逻辑判断。
+
+4. 跳过/失败原因不清晰
+   - 已增加原因列和详情描述。
+
+5. 失败项无法查看 Spine
+   - 已增加失败项预览弹窗。
+
+6. 上传文件无法移除
+   - 已增加上传文件缓存和删除/恢复功能。
+
+7. 检查结果列表卡顿
+   - 原因：过滤后的结果列表全量渲染，结果项较多时 DOM 行数过多。
+   - 已增加分页渲染，只渲染当前页，并支持每页 `10 / 20 / 50 / 100` 条。
+
+8. 失败项预览 Spine 动画空白
+   - 原因一：之前按自动包围盒居中/自动缩放处理，和原版 `Spine 动画预览.html` 的渲染坐标体系不一致，可能把骨骼移出可视区域。
+   - 原因二：检查结果里的 `fileKey` 可能只是事件/动作承载文件，未必是可见渲染文件；同时 atlas 的贴图 page 名可能和默认 `${fileKey}.png` 不一致。
+   - 已回退为和原版预览一致的渲染方式：固定 `1024x1280` canvas、骨骼 `x/y=0`、相机跟随 `skeleton.x/y`、缩放范围 `0.1~2.0`。
+   - 已增加预览内「文件选择 / 动作选择」下拉，可在同一个 Spine ID 下切换不同文件与动作。
+   - 已改造 Spine 加载流程：先加载 `.skel/.atlas`，解析 atlas 内实际贴图 page，再加载所有贴图，避免事件能读到但贴图未绑定导致画布空白。
+   - 2026-05-18 已由用户验证：预览弹窗中 Spine 动画可以正常看到。
+
+9. 失败项预览缺少播放控制
+   - 已在弹窗中部增加控制面板：循环播放、播放速度、动画缩放、播放进度、背景颜色（12色）。
+
+10. 多段技能判定规则变更
+   - 原规则：`expectedHitEnd = effect_list.length - 1`。
+   - 第一版新规则：遍历 `effect_list` 内每个 `effectBid`，按表现链路查找有效 `showCfg`，`showCount = 有表现的 effectBid 数量`，仅 `showCount >= 2` 纳入检查，`expectedHitEnd = showCount - 1`。
+   - 当前规则：先读取每个 `effectBid` 的 `hurt_group` 和 `condition_param` 组成组合分组；`hurt_group` 相同且 `condition_param` 递归规范化后完全一致，才识别为同一组。未配置 `hurt_group` 或未配置 `condition_param` 都作为默认值参与归组，不再排除无 `hurt_group` 的效果。每组独立计算 `showCount`，仅分组内 `showCount >= 2` 时生成检查项，`expectedHitEnd = 当前组合分组 showCount - 1`。
+   - 工具已增加 `buildEffectShowGroups(effectList)` 与 `stableStringify(value)`，并在结果列表中展示“hurt_group / condition_param / 本组效果 / 有表现数量 / 期望 hit_end 数量”。
+
+11. 群攻特效候选资源校验规则变更
+   - 原逻辑：`res_up` 与 `res_down` 会分别生成检查项，可能要求多个资源都满足 hit_end 数量。
+   - 新规则：`area_effect_list` 下所有 `effectId` 的 `res_up/res_down` 全部作为候选组，只要任意 1 个 Spine 资源的目标动作 hit_end 数量达标，即视为该群攻表现通过。
+   - 工具已增加 `areaAlternatives` 候选组与 `checkAreaAlternativeItem(item)`，通过/失败结果会记录所有候选资源明细。
+   - 额外警告：如果多个 `effectId` 中都有资源出现 hit_end（hit_end 数量 > 0），结果中附带警告提示，因为业务预期有且仅有 1 个 `effectId` 资源包含 hit_end。
+
+12. 群攻优先级规则变更
+   - 新规则：同一个技能只要任意有效表现配置了 `area_effect_list`，就优先按群攻特效检查。
+   - 群攻模式下不再校验角色模型 `skill_modle_res` 和角色动作 `anime_user_atk` 是否包含 `hit_end`。
+   - 仅当所有有效表现均无 `area_effect_list` 时，才按单体规则检查角色模型动作。
+
+## 注意事项
+
+- 当前工具仍是独立 HTML，不在项目构建链路内。
+- 当前工具默认不处理 `partner_show_data` 的 `useSkin` 分支，因为工具输入没有皮肤上下文。
+- 如果要继续开发，请优先维护 `spine_check.html`，并同步更新 `battle-spine-tool-context.mdc`、`plan/战斗技能spine检查工具_3f892a37.plan.md`。

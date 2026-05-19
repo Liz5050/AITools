@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<!-- saved from url=(0061)http://192.168.6.1/spine/?spine_id=H320310&time=1778815990410 -->
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spine 动画预览</title>
+    <script src="./libs/jq.js"></script>
+    <script src="./libs/spine-webgl.js"></script>
+    <script src="./libs/vue.global.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&amp;display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-card: #252540;
+            --accent-cyan: #00d4ff;
+            --accent-purple: #7c3aed;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --text-muted: #6b6b80;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+
+        /* 背景装饰 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(ellipse at 20% 20%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(0, 212, 255, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        #app {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .app-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding: 20px 28px;
+            background: linear-gradient(135deg, var(--bg-card) 0%, rgba(124, 58, 237, 0.2) 100%);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+        }
+
+        .app-logo {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            text-shadow: 0 2px 8px rgba(0, 212, 255, 0.4);
+        }
+
+        .app-title {
+            font-size: 22px;
+            font-weight: 600;
+            background: linear-gradient(90deg, var(--text-primary), var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .app-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 360px 1fr 320px;
+            gap: 20px;
+            align-items: stretch;
+        }
+
+        @media (max-width: 1400px) {
+            .main-layout {
+                grid-template-columns: 340px 1fr;
+            }
+            .right-panel {
+                grid-column: 1 / -1;
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+        }
+
+        @media (max-width: 1000px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+            .right-panel {
+                flex-direction: column;
+            }
+        }
+
+        /* 卡片样式 */
+        .panel-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .panel-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .panel-body {
+            padding: 20px;
+        }
+
+        /* 左侧控制面板 */
+        .control-panel .panel-body {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-input {
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.15);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-group .form-input {
+            flex: 1;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-cyan), #0099cc);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 212, 255, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: var(--accent-cyan);
+        }
+
+        .btn-block {
+            width: 100%;
+        }
+
+        /* 自定义下拉框 */
+        .form-select {
+            padding: 12px 16px;
+            padding-right: 40px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23808090' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            transition: all 0.3s ease;
+        }
+
+        .form-select:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.15);
+        }
+
+        .form-select option {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        /* 滑块样式 */
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .slider-input {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            appearance: none;
+            cursor: pointer;
+        }
+
+        .slider-input::-webkit-slider-thumb {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0, 212, 255, 0.4);
+            transition: transform 0.2s ease;
+        }
+
+        .slider-input::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+
+        .slider-value {
+            min-width: 56px;
+            padding: 6px 12px;
+            background: rgba(0, 212, 255, 0.1);
+            border-radius: 6px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent-cyan);
+        }
+
+        /* 复选框 */
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+        }
+
+        .checkbox-input {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--accent-cyan);
+            cursor: pointer;
+        }
+
+        .checkbox-label {
+            font-size: 14px;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        /* 颜色按钮 */
+        .color-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .color-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .color-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .color-btn.active {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 16px rgba(0, 212, 255, 0.5);
+        }
+
+        .color-btn.transparent {
+            background: repeating-linear-gradient(
+                45deg,
+                #333,
+                #333 5px,
+                #444 5px,
+                #444 10px
+            );
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .color-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+
+        .color-label.dark {
+            color: #333;
+            text-shadow: none;
+        }
+
+        /* 消息提示 */
+        .msg-error {
+            color: var(--danger);
+            font-size: 13px;
+            margin-top: 6px;
+        }
+
+        .info-text {
+            color: var(--text-muted);
+            font-size: 13px;
+            margin-left: 8px;
+        }
+
+        /* 画布区域 */
+        .canvas-panel {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            height: 850px;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .canvas-panel #canvas {
+            display: block;
+            background-color: transparent;
+            background-image: url('color.png');
+            background-repeat: repeat;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .canvas-loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            color: var(--text-secondary);
+            z-index: 100;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 右侧面板 */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .right-panel .panel-card {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .info-table th {
+            padding: 12px;
+            text-align: left;
+            background: rgba(0, 212, 255, 0.1);
+            color: var(--accent-cyan);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .info-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .info-table tr:hover td {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-primary);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .empty-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        /* 加载动画 */
+        .fade-enter-active,
+        .fade-leave-active {
+            transition: opacity 0.3s ease;
+        }
+
+        .fade-enter-from,
+        .fade-leave-to {
+            opacity: 0;
+        }
+
+        .slide-enter-active,
+        .slide-leave-active {
+            transition: all 0.3s ease;
+        }
+
+        .slide-enter-from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        .slide-leave-to {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+    </style>
+</head>
+<body>
+    <div id="app" data-v-app=""><header class="app-header"><div class="app-logo">SP</div><div><h1 class="app-title">Spine 动画预览</h1><p class="app-subtitle">Spine WebGL Animation Preview Tool</p></div></header><div class="main-layout"><!-- 左侧控制面板 --><div class="panel-card control-panel"><div class="panel-header"><div class="panel-icon">⚙</div><span class="panel-title">控制面板</span></div><div class="panel-body"><!-- 资源ID --><div class="form-group"><label class="form-label">Spine 资源 ID</label><div class="input-group"><input type="text" class="form-input" placeholder="请输入资源ID"><button class="btn btn-primary"> 加载 </button></div><!--v-if--></div><!-- 文件选择 --><div class="form-group"><label class="form-label">文件选择</label><select class="form-select"><option value="">请先加载资源</option><option value="play">play</option><option value="show">show</option></select></div><!-- 动作选择 --><div class="form-group"><label class="form-label">动作选择</label><div class="input-group"><select class="form-select" style="flex: 1 1 0%;"><option value="">请先选择文件</option><option value="a1">a1</option><option value="a2">a2</option><option value="a3">a3</option><option value="a4">a4</option><option value="attack1">attack1</option><option value="attack2">attack2</option><option value="attack3">attack3</option><option value="attack4">attack4</option><option value="attack5">attack5</option><option value="dead">dead</option><option value="enter1">enter1</option><option value="hurt1">hurt1</option><option value="hurt2">hurt2</option><option value="hurt3">hurt3</option><option value="run1">run1</option><option value="stand1">stand1</option><option value="stand2">stand2</option><option value="stand_empty">stand_empty</option><option value="victory">victory</option><option value="world_attack1">world_attack1</option><option value="world_run1">world_run1</option></select><span class="info-text">2.3333332538604736s</span></div></div><!-- 播放控制 --><div class="form-group"><div class="checkbox-group"><input type="checkbox" id="isLoop" class="checkbox-input"><label for="isLoop" class="checkbox-label">循环播放</label><button class="btn btn-secondary" style="margin-left: auto;"> 播放一次 </button></div></div><!-- 播放速度 --><div class="form-group"><label class="form-label">播放速度</label><div class="slider-group"><input type="range" min="1" max="30" class="slider-input" value="10"><span class="slider-value">1.0</span></div></div><!-- 动画缩放 --><div class="form-group"><label class="form-label">动画缩放</label><div class="slider-group"><input type="range" min="1" max="20" class="slider-input" value="10"><input type="number" class="form-input" min="1" max="20" style="width: 70px; padding: 6px 10px;"></div></div><!-- 播放进度 --><div class="form-group"><label class="form-label">播放进度</label><div class="slider-group"><input type="range" min="0" max="2333" class="slider-input"><span class="slider-value">0ms</span></div></div><!-- 背景颜色 --><div class="form-group"><label class="form-label">背景颜色</label><div class="color-buttons"><button class="color-btn transparent active" title="透明"><span class="color-label">无</span></button><button class="color-btn" title="白色" style="background: rgb(255, 255, 255);"><span class="color-label dark">白</span></button><button class="color-btn" title="黑色" style="background: rgb(0, 0, 0);"><span class="color-label">黑</span></button><button class="color-btn" title="红色" style="background: rgb(239, 68, 68);"><span class="color-label">红</span></button><button class="color-btn" title="绿色" style="background: rgb(16, 185, 129);"><span class="color-label">绿</span></button><button class="color-btn" title="蓝色" style="background: rgb(59, 130, 246);"><span class="color-label">蓝</span></button><button class="color-btn" title="橙色" style="background: rgb(245, 158, 11);"><span class="color-label">橙</span></button><button class="color-btn" title="黄色" style="background: rgb(234, 179, 8);"><span class="color-label dark">黄</span></button><button class="color-btn" title="青色" style="background: rgb(6, 182, 212);"><span class="color-label">青</span></button><button class="color-btn" title="紫色" style="background: rgb(139, 92, 246);"><span class="color-label">紫</span></button><button class="color-btn" title="灰色" style="background: rgb(107, 114, 128);"><span class="color-label">灰</span></button><button class="color-btn" title="粉色" style="background: rgb(236, 72, 153);"><span class="color-label">粉</span></button></div></div></div></div><!-- 中间画布 --><div class="canvas-panel"><canvas id="canvas" width="1024" height="1280" __spector_context_type="webgl" style="background-color: transparent; background-image: url(&quot;color.png&quot;); background-repeat: repeat;"></canvas><!--v-if--></div><!-- 右侧信息 --><div class="right-panel"><div class="panel-card"><div class="panel-header"><div class="panel-icon">🦴</div><span class="panel-title">骨骼信息</span></div><div class="panel-body" style="max-height: 280px; overflow-y: auto;"><div class="empty-state"><div class="empty-icon">📭</div><div>暂无骨骼数据</div></div></div></div><div class="panel-card"><div class="panel-header"><div class="panel-icon">📋</div><span class="panel-title">事件列表</span></div><div class="panel-body" style="max-height: 280px; overflow-y: auto;"><div class="empty-state"><div class="empty-icon">📭</div><div>暂无事件数据</div></div></div></div></div></div></div>
+
+    <script>
+    const { createApp, ref, computed, onMounted, nextTick } = Vue;
+
+    createApp({
+        setup() {
+            // 数据绑定
+            const spineId = ref('H320310');
+            const selectedFile = ref('');
+            const selectedAction = ref('');
+            const isLoop = ref(true);
+            const timeScale = ref(10);
+            const spineScale = ref(10);
+            const timeProgress = ref(0);
+            const maxProgress = ref(30000);
+            const actionTime = ref('');
+            const msg = ref('');
+            const bgColor = ref('transparent');
+            const loading = ref(false);
+
+            // 数据列表
+            const fileList = ref({});
+            const actionList = ref([]);
+            const bones = ref([]);
+            const events = ref([]);
+
+            // Spine 对象
+            let canvas, gl, renderer, assetManager;
+            let skeleton, skeletonData, state;
+            let playing = false;
+            const spineUrl = '/spine/index.php';
+
+            // 初始化 Canvas
+            function initCanvas() {
+                canvas = document.getElementById('canvas');
+                gl = canvas.getContext('webgl');
+                renderer = new spine.webgl.SceneRenderer(canvas, gl, { premultipliedAlpha: true });
+                assetManager = new spine.webgl.AssetManager(gl);
+            }
+
+            // 加载 Spine
+            function loadSpine() {
+                if (!spineId.value) {
+                    msg.value = '请输入资源ID';
+                    return;
+                }
+                loading.value = true;
+                msg.value = '';
+
+                const time = new Date().getTime();
+                window.location.href = window.location.origin + window.location.pathname + '?spine_id=' + spineId.value + '&time=' + time;
+            }
+
+            // 初始化 Spine
+            function initSpine() {
+                if (!selectedFile.value) return;
+                loading.value = true;
+
+                const file = selectedFile.value;
+                const pngFiles = fileList.value[file] || [];
+
+                assetManager.loadBinary(spineUrl + "?spine_id=" + spineId.value + '&spine_file=' + file + '.skel');
+                assetManager.loadText(spineUrl + "?spine_id=" + spineId.value + '&spine_file=' + file + '.atlas');
+                assetManager.loadTexture(spineUrl + "?spine_id=" + spineId.value + '&spine_file=' + file + '.png');
+
+                for (let i = 0; i < pngFiles.length; i++) {
+                    assetManager.loadTexture(spineUrl + "?spine_id=" + spineId.value + '&spine_file=' + pngFiles[i] + '.png');
+                }
+
+                requestAnimationFrame(loadAssets);
+            }
+
+            // 加载资源
+            function loadAssets() {
+                if (assetManager.isLoadingComplete()) {
+                    const file = selectedFile.value;
+
+                    const atlas = new spine.TextureAtlas(
+                        assetManager.get(spineUrl + "?spine_id=" + spineId.value + '&spine_file=' + file + '.atlas'),
+                        (path) => assetManager.get(spineUrl + "?spine_id=" + spineId.value + '&spine_file=' + path)
+                    );
+
+                    const atlasLoader = new spine.AtlasAttachmentLoader(atlas);
+                    const skeletonBinary = new spine.SkeletonBinary(atlasLoader);
+                    skeletonData = skeletonBinary.readSkeletonData(
+                        assetManager.get(spineUrl + "?spine_id=" + spineId.value + '&spine_file=' + file + '.skel')
+                    );
+
+                    skeleton = new spine.Skeleton(skeletonData);
+
+                    // 获取动作列表
+                    actionList.value = skeletonData.animations.map(a => a.name);
+                    if (actionList.value.length > 0) {
+                        selectedAction.value = actionList.value[0];
+                    }
+
+                    const animationStateData = new spine.AnimationStateData(skeleton.data);
+                    state = new spine.AnimationState(animationStateData);
+                    state.timeScale = 1.0;
+
+                    playSpineAction();
+                    requestAnimationFrame(render);
+                    loading.value = false;
+                } else {
+                    requestAnimationFrame(loadAssets);
+                }
+            }
+
+            // 播放动作
+            function playSpineAction() {
+                if (!state || !skeletonData) return;
+
+                const action = state.setAnimation(0, selectedAction.value, isLoop.value);
+                action.timeScale = timeScale.value * 0.1;
+
+                skeleton.scaleX = spineScale.value * 0.1;
+                skeleton.scaleY = spineScale.value * 0.1;
+
+                // 获取动作详情
+                for (let i = 0; i < skeletonData.animations.length; i++) {
+                    if (skeletonData.animations[i].name === selectedAction.value) {
+                        parseAnimation(skeletonData.animations[i]);
+                        break;
+                    }
+                }
+
+                playing = true;
+            }
+
+            // 解析动作
+            function parseAnimation(animation) {
+                actionTime.value = animation.duration;
+                maxProgress.value = Math.round(animation.duration * 1000);
+                timeProgress.value = 0;
+
+                // 获取骨骼
+                bones.value = [];
+                for (let i = 0; i < skeleton.bones.length; i++) {
+                    const boneName = skeleton.bones[i].data.name;
+                    if (boneName.indexOf('point') >= 0) {
+                        bones.value.push(boneName);
+                    }
+                }
+
+                // 获取事件
+                events.value = [];
+                for (let i = 0; i < animation.timelines.length; i++) {
+                    const timeline = animation.timelines[i];
+                    if (timeline instanceof spine.EventTimeline) {
+                        for (let k = 0; k < timeline.frames.length; k++) {
+                            events.value.push({
+                                action: animation.name,
+                                name: timeline.events[k].data.name,
+                                time: timeline.frames[k]
+                            });
+                        }
+                    }
+                }
+            }
+
+            // 播放一次
+            function playOnce() {
+                isLoop.value = false;
+                playSpineAction();
+            }
+
+            // 更新速度
+            function updateSpeed() {
+                if (state) {
+                    const action = state.getCurrent(0);
+                    if (action) {
+                        action.timeScale = timeScale.value * 0.1;
+                    }
+                }
+            }
+
+            // 更新缩放
+            function updateScale() {
+                // 确保值在有效范围内
+                if (spineScale.value < 1) spineScale.value = 1;
+                if (spineScale.value > 20) spineScale.value = 20;
+                if (skeleton) {
+                    skeleton.scaleX = spineScale.value * 0.1;
+                    skeleton.scaleY = spineScale.value * 0.1;
+                }
+            }
+
+            // 跳转进度
+            function seekProgress() {
+                playing = false;
+                const action = state.setAnimation(0, selectedAction.value, false);
+                action.time = 0;
+                state.update(timeProgress.value / 1000);
+                state.apply(skeleton);
+                skeleton.updateWorldTransform();
+
+                renderer.begin();
+                renderer.drawSkeleton(skeleton, false);
+                renderer.end();
+            }
+
+            // 设置背景
+            function setBgColor(color) {
+                bgColor.value = color;
+                if (color === 'transparent') {
+                    canvas.style.backgroundColor = 'transparent';
+                    canvas.style.backgroundImage = "url('color.png')";
+                    canvas.style.backgroundRepeat = 'repeat';
+                } else {
+                    canvas.style.backgroundColor = color;
+                    canvas.style.backgroundImage = 'none';
+                }
+            }
+
+            // 渲染
+            function render(time) {
+                if (playing && state && skeleton) {
+                    gl.clearColor(0, 0, 0, 0);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+
+                    time = Date.now() / 1000;
+                    if (state.last_time) {
+                        state.update(time - state.last_time);
+                    }
+                    state.last_time = time;
+
+                    state.apply(skeleton);
+                    skeleton.updateWorldTransform();
+
+                    renderer.camera.position.x = skeleton.x;
+                    renderer.camera.position.y = skeleton.y;
+                    renderer.resize();
+
+                    renderer.begin();
+                    renderer.drawSkeleton(skeleton, false);
+                    renderer.end();
+                }
+
+                requestAnimationFrame(render);
+            }
+
+            // 初始化数据
+            function initData() {
+                const data = {"files":{"play":[],"show":[]},"msg":""};
+                if (data) {
+                    msg.value = data.msg || '';
+                    fileList.value = data.files || {};
+
+                    // 如果有文件，自动选择第一个
+                    const firstFile = Object.keys(fileList.value)[0];
+                    if (firstFile) {
+                        selectedFile.value = firstFile;
+                        nextTick(() => {
+                            initSpine();
+                        });
+                    }
+                }
+            }
+
+            onMounted(() => {
+                initCanvas();
+                initData();
+                // 初始化背景为透明（显示color.png）
+                setBgColor('transparent');
+            });
+
+            return {
+                spineId,
+                selectedFile,
+                selectedAction,
+   …</script>
+
+
+</body></html>
