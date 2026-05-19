@@ -21,7 +21,9 @@ isProject: false
 
 ## 当前产物
 
-- 工具文件：`spine_check.html`
+- 工具入口：`spine_check.html`
+- 样式文件：`assets/spine-check.css`
+- 业务逻辑：`assets/spine-check.js`
 - 依赖文件：`libs/vue.global.js`、`libs/spine-webgl.js`
 - 参考原始预览页：`Spine 动画预览.html`
 
@@ -245,7 +247,9 @@ calculateSkeletonBounds(skeleton)
 
 ## 当前关键函数索引
 
-文件：`g:\临时\战斗技能Spine_hit_end检查工具.html`
+入口：`spine_check.html`
+
+业务逻辑文件：`assets/spine-check.js`
 
 ```text
 readFiles(files)                       上传并解析 JSON
@@ -276,7 +280,7 @@ exportReport()                          导出 JSON 报告
 
 ## 后续可能优化
 
-- 将工具迁移到项目内 `tools/` 或独立工具目录，避免放在 `g:\临时`。
+- 如继续扩展，可按功能继续拆分 `assets/spine-check.js`，但需保持 `spine_check.html` 入口可直接打开。
 - 增加报告导出 CSV。
 - 增加只显示 Fail/Skip 的默认视图。
 - 增加对 `partner_show_data` 皮肤表现映射的可选支持，目前工具没有输入 `useSkin`，默认不处理皮肤分支。
